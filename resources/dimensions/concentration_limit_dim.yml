@@ -1,0 +1,46 @@
+name: concentration_limit_dim
+type: dimension
+scd_type: 1
+primary_key:
+  name: concentration_limit_dim_pk
+  columns: [id]
+natural_key: [Constraint Type, Constrained Attribute, Threshold, Constrained Value]
+indexes: [Constraint Type, Constrained Attribute, Threshold, Constrained Value]
+columns:
+  - name: id
+    data_type: bigserial
+    nullable: false
+    source: generated
+    description: The unique, surrogate/warehouse key for a concentration limit.
+
+  - name: Constraint Type
+    data_type: string
+    nullable: false
+    source: FundingChannels.funding-channel.?
+    source_description: Marketplace Allocator
+    description: The rule type that determines how the Value constrains the Field. e.g. MaxPercentageRule, MaxAllocationLifetime
+
+  - name: Constrained Attribute
+    data_type: string
+    nullable: false
+    source: FundingChannels.funding-channel.?
+    source_description: Marketplace Allocator
+    description: The attribute of the listing that this rule constrains
+
+  - name: Constrained Value
+    data_type: string
+    nullable: true
+    source: FundingChannels.funding-channel.?
+    source_description: Marketplace Allocator
+    description: If applicable, the specific value of the listing attribute that this constraint applies to.
+
+  - name: Threshold
+    data_type: real
+    nullable: false
+    source: FundingChannels.funding-channel.?
+    source_description: Marketplace Allocator
+    description: The value we are constraining our concentration to.
+
+notes: >
+        Concentration Limits are mastered in the Funding Channel .edn files
+        https://github.com/FundingCircle/marketplace-allocator/tree/master/funding-channels/

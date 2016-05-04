@@ -1,0 +1,39 @@
+name: eligibility_criterion_dim
+type: dimension
+scd_type: 1
+primary_key:
+  name: eligibility_criterion_dim_pk
+  columns: [id]
+natural_key: [Criterion Type, Criterion Attribute, Criterion Value]
+indexes: [Criterion Type, Criterion Attribute, Criterion Value]
+columns:
+  - name: id
+    data_type: bigserial
+    nullable: false
+    source: generated
+    description: The unique, surrogate/warehouse key for an eligibility criterion.
+
+  - name: Criterion Type
+    data_type: string
+    nullable: false
+    source: FundingChannels.funding-channel?
+    source_description: Marketplace Allocator
+    description: Indicates whether this criterion is an inclusion or exclusion on the given field and value.
+
+  - name: Criterion Attribute
+    data_type: string
+    nullable: false
+    source: FundingChannels.funding-channel?
+    source_description: Marketplace Allocator
+    description: Which attribute in the listing this criterion is evaluated against.
+
+  - name: Criterion Value
+    data_type: string
+    nullable: true
+    source: FundingChannels.funding-channel?
+    source_description: Marketplace Allocator
+    description: The value to evaluate the criterion against.  Note that we use a string type here, in the warehouse, whereas the actual evaluation might use integer, long, etc.
+
+notes: >
+        Eligibility Criteria are mastered in the Funding Channel .edn files
+        https://github.com/FundingCircle/marketplace-allocator/tree/master/funding-channels/

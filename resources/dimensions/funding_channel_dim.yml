@@ -1,0 +1,49 @@
+name: funding_channel_dim
+type: dimension
+scd_type: 2
+primary_key:
+  name: funding_channel_dim_pk
+  columns: [id]
+indexes: [Funding Channel UUID]
+natural_key: Funding Channel UUID
+incomparable_columns:
+  - id
+columns:
+  - name: id
+    data_type: bigserial
+    nullable: false
+    source: generated
+    description: The unique, surrogate/warehouse key for a funding channel.
+
+  - name: Funding Channel UUID
+    data_type: uuid
+    nullable: false
+    source: FundingChannels.funding-channels[funding-channel.id]
+    source_description: Not yet emitted
+    description: The unique UUID identifying a single funding channel within the source/operational system.
+
+  - name: Name
+    data_type: string
+    nullable: false
+    source: FundingChannels.funding-channels[funding-channel.name]
+    source_description: Not yet emitted
+    description: The name associated with this funding channel, i.e. how humans refer to the channel in speech.
+
+  - name: Allocation Percentage
+    data_type: numeric
+    nullable: false
+    source: AllocationSettingsUpdated.funding-channels[funding-channel.percentage]
+    source_description: Not yet emitted
+    description: The percentage of products to allocate to this funding channel, assuming all other funding channels are part of the eligible pool.
+
+  - name: Referral Only?
+    data_type: boolean
+    nullable: false
+    source: unknown (issue raised to have this added to the FundingChannels events)
+    description: Indicates whether or not the channel only accepts loans referred by its investor.
+
+  - name: Scale Allocation Percentage?
+    data_type: boolean
+    nullable: false
+    source: unknown (issue raised to have this added to the FundingChannels events)
+    description: Indicates whether or not the channel's Allocation Percentage should be scaled up in the event that the sum of all eligible channel's percentages is less than 100.

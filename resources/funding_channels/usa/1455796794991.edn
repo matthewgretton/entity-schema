@@ -1,0 +1,86 @@
+[{:id #uuid "22c280da-7f32-4930-a1d3-faccad266924"
+  :name "Grand Point"
+  :referral-only false
+  :scale-percentage? true
+  :eligibility-criteria [{:rule Include
+                          :args {:attribute :risk-band
+                                 :value #{:Aplus :A}}}]
+  :concentration-limits [{:rule MaxAllocationLifetime
+                          :args {:attribute :original-principal-cents
+                                 :value 1100}}
+                         {:rule MaxAllocationMonthly
+                          :args {:attribute :original-principal-cents
+                                 :value 110}}]}
+ {:id #uuid "709fd452-d862-45a6-8783-e4b5c631e6f7"
+  :name "Victory Park"
+  :referral-only false
+  :scale-percentage? true
+  :eligibility-criteria [{:rule Include
+                          :args {:attribute :risk-band
+                                 :value #{:Aplus :A :B :C :D}}}
+                         {:rule Include
+                          :args {:attribute :product-type
+                                 :value #{:non-cca}}}]
+  :concentration-limits [{:rule MaxAllocationLifetime
+                          :args {:attribute :original-principal-cents
+                                 :value 1000}}
+                         {:rule MaxAllocationMonthly
+                          :args {:attribute :original-principal-cents
+                                 :value 100}}]}
+ {:id #uuid "6b9aa9ea-63df-4612-812a-260ba940f134"
+  :name "Neuberger Berman"
+  :referral-only false
+  :scale-percentage? true
+  :eligibility-criteria [{:rule Include
+                          :args {:attribute :risk-band
+                                 :value #{:Aplus :A :B :C}}}
+                         {:rule Include
+                          :args {:attribute :product-type
+                                 :value #{:non-cca}}}]
+  :concentration-limits [{:rule MaxAllocationLifetime
+                          :args {:attribute :original-principal-cents
+                                 :value 900}}
+                         {:rule MaxAllocationMonthly
+                          :args {:attribute :original-principal-cents
+                                 :value 90}}]}
+ {:id #uuid "ca141b26-fa0f-4dfa-8da2-3c9ebaddd455"
+  :name "KLS"
+  :referral-only false
+  :scale-percentage? true
+  :eligibility-criteria [{:rule Exclude
+                          :args {:attribute :term-months
+                                 :value #{12}}}]
+  :concentration-limits [{:rule MaxAllocationLifetime
+                          :args {:attribute :original-principal-cents
+                                 :value 800}}
+                         {:rule MaxAllocationMonthly
+                          :args {:attribute :original-principal-cents
+                                 :value 80}}]}
+ {:id #uuid "4a073a0b-34ad-4f5c-9ab8-eef925c076c9"
+  :name "Route 66"
+  :referral-only false
+  :scale-percentage? true
+  :eligibility-criteria []
+  :concentration-limits [{:rule MaxAllocationLifetime
+                          :args {:attribute :original-principal-cents
+                                 :value 700}}
+                         {:rule MaxAllocationMonthly
+                          :args {:attribute :original-principal-cents
+                                 :value 70}}]}
+ {:id #uuid "c02642d1-4676-441a-8b6b-6faa1127286f"
+  :name "FC SME Income Fund"
+  :referral-only false
+  :scale-percentage? false
+  :eligibility-criteria []
+  :concentration-limits [{:rule MaxAllocationLifetime
+                          :args {:attribute :original-principal-cents
+                                 :value 600}}
+                         {:rule MaxAllocationMonthly
+                          :args {:attribute :original-principal-cents
+                                 :value 60}}]}
+ {:id #uuid "c8e118c7-3fcf-4d92-aef0-4d629a78f16b"
+  :name "Partial Marketplace"
+  :referral-only false
+  :scale-percentage? true
+  :eligibility-criteria []
+  :concentration-limits []}]

@@ -1,0 +1,81 @@
+[{:id #uuid "1c6fe584-68e3-11e4-977d-afe43730bb14"
+  :name "Dorset Rise Ltd"
+  :referral-only false
+  :scale-percentage? true
+  :eligibility-criteria [{:rule Include
+                          :args {:attribute :risk-band
+                                 :value #{:Aplus :A :B :C :D}}}
+                         {:rule Include
+                          :args {:attribute :product-type
+                                 :value #{:non-cca}}}
+                         {:rule Include
+                          :args {:attribute :secured
+                                 :value #{false}}}]
+  :concentration-limits [{:rule MaxAllocationLifetime
+                          :args {:attribute :original-principal-cents
+                                 :value 1000}}
+                         {:rule MaxAllocationMonthly
+                          :args {:attribute :original-principal-cents
+                                 :value 100}}
+                         {:rule MaxPercentageRule
+                          :args {:attribute :risk-band
+                                 :value #{:A}
+                                 :percentage 0.1}}
+                         {:rule MaxBorrowerExposureRule
+                          :args {:value 10000000
+                                 :attribute :borrower-id}}
+                         {:rule MaxPercentageRule
+                          :args {:attribute :risk-band
+                                 :value #{:B :C}
+                                 :percentage 0.3}}
+                         {:rule MaxPercentageRule
+                          :args {:attribute :term-months
+                                 :value #{12 16}
+                                 :percentage 0.1}}]}
+ {:id #uuid "69d606ea-eda0-11e4-9891-21386d0e3dc0"
+  :name "Threadneedle Lending Ltd"
+  :referral-only false
+  :scale-percentage? true
+  :eligibility-criteria [{:rule Include
+                          :args {:attribute :risk-band
+                                 :value #{:Aplus :A :B :C :D}}}
+                         {:rule Include
+                          :args {:attribute :product-type
+                                 :value #{:non-cca}}}
+                         {:rule Include
+                          :args {:attribute :secured
+                                 :value #{false}}}]
+  :concentration-limits [{:rule MaxAllocationLifetime
+                          :args {:attribute :original-principal-cents
+                                 :value 900}}
+                         {:rule MaxAllocationMonthly
+                          :args {:attribute :original-principal-cents
+                                 :value 90}}]}
+ {:id #uuid "579499a6-ac4a-4473-8d55-d12c6c33adb6"
+  :name "FC SME Income Fund"
+  :referral-only false
+  :scale-percentage? false
+  :eligibility-criteria [{:rule Include
+                          :args {:attribute :risk-band
+                                 :value #{:Aplus :A :B :C :D :E}}}
+                         {:rule Include
+                          :args {:attribute :product-type
+                                 :value #{:non-cca :property-development :property-finance}}}]
+  :concentration-limits [{:rule MaxAllocationLifetime
+                          :args {:attribute :original-principal-cents
+                                 :value 800}}
+                         {:rule MaxAllocationMonthly
+                          :args {:attribute :original-principal-cents
+                                 :value 80}}]}
+ {:id #uuid "eda72348-0434-4d92-a574-b4097d0fd749"
+  :name "Active Marketplace"
+  :referral-only false
+  :scale-percentage? true
+  :eligibility-criteria []
+  :concentration-limits []}
+ {:id #uuid "2dfb487c-4bdd-4a99-9094-5410861065b3"
+  :name "Partial Marketplace"
+  :referral-only false
+  :scale-percentage? true
+  :eligibility-criteria []
+  :concentration-limits []}]
