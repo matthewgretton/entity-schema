@@ -18,6 +18,7 @@
   (-> name
       (clojure.string/replace "_" "-")
       (clojure.string/replace " " "-")
+      (clojure.string/replace "-dim" "")
       (clojure.string/lower-case)))
 
 (defn to-coll [item]
@@ -87,6 +88,14 @@
                                    (map #(create-db-ident name %))
                                    (into #{}))
    })
+
+(defn create-entity-schema [conn file-path]
+  (let [yaml (clojure-from-yaml file-path)
+        fields (datomic-fields-from-yaml yaml)
+        entity-schema (datomic-entity-schema-from-yaml yaml)]
+    @(d/transact conn fields)
+    @(d/transact conn [entity-schema])))
+
 
 
 

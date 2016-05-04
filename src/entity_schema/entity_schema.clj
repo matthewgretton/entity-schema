@@ -43,6 +43,7 @@
                                                 (assoc stub :field/entity-schema (:db/ident entity-schema))
                                                 stub))
                                             ))
+                                     (filter (comp not nil? second))
                                      (into #{}))
 
      :entity.schema/natural-key (->> natural-key
@@ -89,6 +90,23 @@
 
 (defn bootstrap [conn]
   @(d/transact conn entity-schema-fields))
+
+
+
+(defn modify-entity-schema-optionality-tx [db entity-id field-id required?]
+  (->> (d/pull db
+               [{:entity.schema/fields [:db/id
+                                        {:field/schema [:db/ident]}]}] entity-id)
+       :entity.schema/fields
+       (filter (fn [f]
+                 (= field-id
+                    (get-in f [:field/schema :db/ident]))))
+       (map (fn [{:keys [:db/id]}]
+              [:db/add id :field/required? required?]))
+       (into [])
+       ))
+
+
 
 
 

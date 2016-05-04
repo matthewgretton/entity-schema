@@ -12,18 +12,7 @@
     (es/bootstrap (d/connect uri))                          ;;connect caches connection
     (d/connect uri)))
 
-(defn modify-entity-schema-optionality-tx [db entity-id field-id required?]
-  (->> (d/pull db
-               [{:entity.schema/fields [:db/id
-                                        {:field/schema [:db/ident]}]}] entity-id)
-       :entity.schema/fields
-       (filter (fn [f]
-                 (= field-id
-                    (get-in f [:field/schema :db/ident]))))
-       (map (fn [{:keys [:db/id]}]
-              [:db/add id :field/required? required?]))
-       (into [])
-       ))
+
 
 ;; create connection and boot-strap with enity schema fields
 (def conn (boot-strap-conn))
