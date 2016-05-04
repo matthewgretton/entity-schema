@@ -60,7 +60,7 @@
   (es/pull-expanded-schema db-snapshot-0 db-ident))
 
 
-(def example-concentration-limit
+(def example-concentration-limit-0
   {:event/instant                                 (Date.)
    :db/ident                                      :entity.schema/concentration-limit-dim
    :concentration-limit-dim/threshold             (float 0.7)
@@ -68,12 +68,7 @@
    :concentration-limit-dim/constrained-attribute "Blah"})
 
 ;; validate example
-(v/non-back-compatible-validate db-snapshot-0 example-concentration-limit)
-
-
-
-
-
+(v/validate-structure db-snapshot-0 example-concentration-limit-0)
 
 
 ;;Make a non-back compatible change to the schema. Making a non required field required.
@@ -93,7 +88,27 @@
 (es/pull-unexpanded-schema db-snapshot-1 db-ident)
 
 
-(v/non-back-compatible-validate db-snapshot-1 ex)
+(def example-concentration-limit-1
+  {:event/instant                                 (Date.)
+   :db/ident                                      :entity.schema/concentration-limit-dim
+   :concentration-limit-dim/threshold             (float 0.7)
+   :concentration-limit-dim/constraint-type       "NotSureWhatGoesHere"
+   :concentration-limit-dim/constrained-attribute "Blah"})
+
+;; even through we have updated the db the old example still validates, as it it is valid with respect to it's :
+;; event/instant
+
+(v/validate-structure db-snapshot-1 example-concentration-limit-0)
+
+(v/validate-structure db-snapshot-1 example-concentration-limit-1)
+
+
+
+
+;;Questions, so this is great, but what do we do with our code??? This has to be compatible as well
+;; Is the time aspect really adding that much value
+
+;; In my ideal system code would be deployed to the database, and applications run from there.
 
 
 

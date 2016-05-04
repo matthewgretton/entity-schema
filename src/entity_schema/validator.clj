@@ -1,6 +1,7 @@
 (ns entity-schema.validator
   (:require [entity-schema.entity-schema :as es]
-            [datomic.api :as d])
+            [datomic.api :as d]
+            [entity-schema.printing-tools :as pt])
   (:import (java.net URI)
            (java.util UUID Date)
            (clojure.lang Keyword)))
@@ -28,19 +29,30 @@
 (declare validate-row)
 
 
-(defn error [type msg]
+(defn error [type msg data]
   {:error/type    type
-   :error/message msg})
+   :error/message msg
+   :error/data data})
 
 ;Error functions
 (defn incorrect-type-error [value expected-type actual-type]
-  (error :error.type/incorrect-type (str "Type of " value " expected to be " expected-type " but was " actual-type)))
+  (error :error.type/incorrect-type
+         "Type of value is not correct"
+         {:value value
+          :expected-type expected-type
+          :actual-type actual-type}))
 
 (defn unrecognised-type-error [type type-map]
-  (error :error.type/unrecognised-type (str "Type " type " is expected to be a key of " type-map)))
+  (error :error.type/unrecognised-type
+         "Type is not recognised"
+         {:type type
+          :recognised-keys type-map}))
 
 (defn required-type-error [row ident]
-  (error :error.type/required-field (str "It is expected that " ident " is contained in or can be derived from row " row)))
+  (error :error.type/required-field
+         "It is expected that the field is contained or can be derived from the row"
+         {:field ident
+          :row row}))
 
 
 
@@ -88,16 +100,12 @@
    (->> fields
         (map (fn [field-schema]
                (validate-field row parent-idents field-schema)))
+        (filter (comp not nil? second))
         (into {})))
   ([row entity-schema]
     (validate-row row [] entity-schema)))
 
-
-(defn non-back-compatible-validate [db {:keys [:db/ident] :as row}]
-  (let [schema (es/pull-expanded-schema db ident)]
-    (validate-row row schema)))
-
-(defn back-compatible-validate [db {:keys [:db/ident :event/instant] :as row}]
+(defn validate-structure [db {:keys [:db/ident :event/instant] :as row}]
   (let [db-asof (d/as-of db instant)
         schema (es/pull-expanded-schema db-asof ident)]
     (validate-row row schema)))
