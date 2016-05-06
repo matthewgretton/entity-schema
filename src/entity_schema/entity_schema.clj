@@ -24,21 +24,21 @@
 
 
 
-(defn pull-unexpanded-schema [db id]
+(defn pull-schema [db id]
   (let [{:keys [:db/ident :entity.schema/fields :entity.schema/natural-key]}
         (d/pull db '[:db/ident
                      {:entity.schema/fields [{:field/schema [:db/ident]}
-                                             :field/required?
+                                             :field/nullable?
                                              {:field/entity-schema [:db/ident]}]}
                      {:entity.schema/natural-key [:db/ident]}] id)]
     {
      :db/ident                  ident
      :entity.schema/fields      (->> fields
                                      (map (fn [{:keys [:field/schema
-                                                       :field/required?
+                                                       :field/nullable?
                                                        :field/entity-schema]}]
                                             (let [stub {:field/schema        (:db/ident schema)
-                                                        :field/required?     required?}]
+                                                        :field/nullable?     nullable?}]
                                               (if entity-schema
                                                 (assoc stub :field/entity-schema (:db/ident entity-schema))
                                                 stub))
@@ -65,7 +65,7 @@
 
    {:db/id                 (d/tempid :db.part/db)
     :db.install/_attribute :db.part/db
-    :db/ident              :field/required?
+    :db/ident              :field/nullable?
     :db/valueType          :db.type/boolean
     :db/cardinality        :db.cardinality/one}
 
@@ -93,7 +93,7 @@
 
 
 
-(defn modify-entity-schema-optionality-tx [db entity-id field-id required?]
+(defn modify-entity-schema-optionality-tx [db entity-id field-id nullable?]
   (->> (d/pull db
                [{:entity.schema/fields [:db/id
                                         {:field/schema [:db/ident]}]}] entity-id)
@@ -102,7 +102,7 @@
                  (= field-id
                     (get-in f [:field/schema :db/ident]))))
        (map (fn [{:keys [:db/id]}]
-              [:db/add id :field/required? required?]))
+              [:db/add id :field/nullable? nullable?]))
        (into [])
        ))
 

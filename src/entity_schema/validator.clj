@@ -1,7 +1,6 @@
 (ns entity-schema.validator
   (:require [entity-schema.entity-schema :as es]
-            [datomic.api :as d]
-            [entity-schema.printing-tools :as pt])
+            [datomic.api :as d])
   (:import (java.net URI)
            (java.util UUID Date)
            (clojure.lang Keyword)))
@@ -48,9 +47,9 @@
          {:type type
           :recognised-keys type-map}))
 
-(defn required-type-error [row ident]
-  (error :error.type/required-field
-         "It is expected that the field is contained or can be derived from the row"
+(defn not-nullable-error [row ident]
+  (error :error.type/nullable-field
+         "Non nullable field. Is expected that the field is contained or can be derived from the row"
          {:field ident
           :row row}))
 
@@ -82,7 +81,7 @@
 
 (defn validate-field [row
                       parent-idents
-                      {required?                                          :field/required?
+                      {nullable?                                          :field/nullable?
                        entity-schema                                      :field/entity-schema
                        {:keys [:db/valueType :db/ident] :as field-schema} :field/schema}]
   [ident
@@ -90,8 +89,8 @@
                     (validate-row row (conj-into-vec parent-idents ident) entity-schema)
                     (process-field-schema row parent-idents field-schema))]
      value
-     (if required?
-       (required-type-error row ident)))])
+     (if (not nullable?)
+       (not-nullable-error row ident)))])
 
 (defn validate-row
   ([row

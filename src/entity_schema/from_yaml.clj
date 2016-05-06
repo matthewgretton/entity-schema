@@ -1,7 +1,6 @@
 (ns entity-schema.from-yaml
   (:require [clj-yaml.core :as yaml]
-            [datomic.api :as d]
-            [entity-schema.entity-schema :as es]))
+            [datomic.api :as d]))
 
 
 (def yaml-datomic-type-map
@@ -13,7 +12,6 @@
    "boolean"   :db.type/boolean
    "timestamp" :db.type/instant})
 
-
 (defn prettify-name [name]
   (-> name
       (clojure.string/replace "_" "-")
@@ -21,7 +19,8 @@
       (clojure.string/replace "-dim" "")
       (clojure.string/lower-case)))
 
-(defn to-coll [item]
+(defn to-coll
+  [item]
   (if (coll? item)
     item
     #{item}))
@@ -63,12 +62,10 @@
        (slurp)
        (yaml/parse-string)))
 
-
-
 (defn create-entity-schema-field [entity-name {:keys [:name :nullable]}]
   {:db/id (d/tempid :db.part/user)
    :field/schema (create-db-ident entity-name name)
-   :field/required? (not nullable)})
+   :field/nullable? nullable})
 
 (defn create-entity-schema-ident [name]
   (keyword "entity.schema" (prettify-name name)))
@@ -94,7 +91,8 @@
         fields (datomic-fields-from-yaml yaml)
         entity-schema (datomic-entity-schema-from-yaml yaml)]
     @(d/transact conn fields)
-    @(d/transact conn [entity-schema])))
+    @(d/transact conn [entity-schema])
+    (create-entity-schema-ident (:name yaml))))
 
 
 
