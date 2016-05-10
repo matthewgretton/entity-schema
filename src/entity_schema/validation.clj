@@ -71,7 +71,7 @@
            (let [type-checked-val (validate-type valueType val)]
              (if (or (error? type-checked-val) (not= valueType :db.type/ref))
                type-checked-val
-               (->> (es/derive-schema db (get entity field-entity-schema))L :
+               (->> (es/derive-schema db (get entity field-entity-schema))
                     (validate-entity db type-checked-val))))
            (if (not nullable?)
              (not-nullable-error entity-schema-id ident)))])
