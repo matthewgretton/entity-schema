@@ -1,6 +1,9 @@
 (ns entity-schema.validation-test
   (:require [clojure.test :refer :all]
-            [entity-schema.validation :as v]))
+            [entity-schema.validation :as v]
+            [entity-schema.entity-schema :as es]
+            [datomic.api :as d])
+  (:import (java.util Date)))
 
 
 
@@ -9,175 +12,217 @@
 (deftest get-val-test
   (testing "Test missing when required field"
     (is (= [:test-entity/string-field
-            {:error/data    {:field  :test-entity/string-field
-                             :entity {:test-entity/double-field "bob"}}
-             :error/message "Non nullable field. Is expected that the field is contained or can be derived from the row"
+            {:error/data    {:field     :test-entity/string-field
+                             :entity-id :entity.schema/test}
+             :error/message "Required Field"
              :error/type    :error.type/nullable-field}]
 
-           (v/validate-field  {:test-entity/double-field "bob"}
-                            {:field/schema    {:db/ident     :test-entity/string-field
-                                               :db/valueType :db.type/string}
-                             :field/nullable? false}))))
+           (v/validate-field nil :entity.schema/test {:test-entity/double-field "bob"}
+                             {:field/schema    {:db/ident     :test-entity/string-field
+                                                :db/valueType {:db/ident :db.type/string}}
+                              :field/nullable? false}))))
 
   (testing "Test missing when not required field"
     (is (= [:test-entity/string-field nil]
 
-           (v/validate-field  {:test-entity/double-field "bob"}
-                            {:field/schema    {:db/ident     :test-entity/string-field
-                                               :db/valueType :db.type/string}
-                             :field/nullable? true}))))
+           (v/validate-field nil :entity.schema/test {:test-entity/double-field "bob"}
+                             {:field/schema    {:db/ident     :test-entity/string-field
+                                                :db/valueType {:db/ident :db.type/string}}
+                              :field/nullable? true}))))
 
   (testing "Test get value"
     (is (= [:test-entity/double-field 1.0]
 
-           (v/validate-field
-             {:test-entity/double-field 1.0}
-             {:field/schema    {:db/ident     :test-entity/double-field
-                                :db/valueType :db.type/double}
-              :field/nullable? false}))))
+           (v/validate-field nil :entity.schema/test
+                             {:test-entity/double-field 1.0}
+                             {:field/schema    {:db/ident     :test-entity/double-field
+                                                :db/valueType {:db/ident :db.type/double}}
+                              :field/nullable? false}))))
 
   (testing "Test get value key parent style key in row"
     (is (= [:test-entity/double-field 1.0]
 
-           (v/validate-field
-             {:test-entity/double-field 1.0}
+           (v/validate-field nil :entity.schema/test
+                             {:test-entity/double-field 1.0}
 
-             {:field/schema    {:db/ident     :test-entity/double-field
-                                :db/valueType :db.type/double}
-              :field/nullable? false}))))
+                             {:field/schema    {:db/ident     :test-entity/double-field
+                                                :db/valueType {:db/ident :db.type/double}}
+                              :field/nullable? false}))))
 
   (testing "Test getting value with wrong type"
     (is (= [:test-entity/double-field
             {:error/data    {:actual-type   java.lang.String
                              :expected-type :db.type/double
                              :value         "bob"}
-             :error/message "Type of value is not correct"
+             :error/message "Incorrect Value Type"
              :error/type    :error.type/incorrect-type}]
 
-           (v/validate-field
-             {:test-entity/double-field "bob"}
-             {:field/schema    {:db/ident     :test-entity/double-field
-                                :db/valueType :db.type/double}
-              :field/nullable? false}))))
+           (v/validate-field nil :entity.schema/test
+                             {:test-entity/double-field "bob"}
+                             {:field/schema    {:db/ident     :test-entity/double-field
+                                                :db/valueType {:db/ident :db.type/double}}
+                              :field/nullable? false}))))
 
 
   (testing "Test getting a ref field"
     (is (= [:test-entity/ref-field 16]
 
            (with-redefs-fn {#'v/validate-entity
-                            (fn [row schema]
-                              16)}
+                            (fn [db row schema]
+                              16)
+                            #'es/derive-schema
+                            (fn [db entity]
+                              {})}
 
-             #(v/validate-field  {:test-entity/double-field "bob"
-                                  :test-entity/ref-field {}}
-                               {:field/schema        {:db/ident     :test-entity/ref-field
-                                                      :db/valueType :db.type/ref}
-                                :field/entity-schema {}
-                                :field/nullable?     false})))))
+             #(v/validate-field "db" :entity.schema/test {:test-entity/double-field "bob"
+                                                          :test-entity/ref-field    {}}
+                                {:field/schema        {:db/ident     :test-entity/ref-field
+                                                       :db/valueType {:db/ident :db.type/ref}}
+                                 :field/entity-schema {}
+                                 :field/nullable?     false})))))
 
   (testing "Test getting a ref field"
-    (is (= [:test-entity/ref-field 16]
+    (is (= [:test-entity/ref-field {:a 1}]
 
            (with-redefs-fn {#'v/validate-entity
-                            (fn [row schema]
-                              16)}
+                            (fn [db row schema]
+                              (clojure.pprint/pprint (str "!!!!" schema))
+                              (assert (= schema {}))
+                              (assert (= db "db"))
+                              row)
+                            #'es/derive-schema
+                            (fn [db entity]
+                              (assert (= db "db"))
+                              {})}
 
-             #(v/validate-field  {:test-entity/double-field "bob"
-                                  :test-entity/ref-field 23}
-                                 {:field/schema        {:db/ident     :test-entity/ref-field
-                                                        :db/valueType :db.type/ref}
-                                  :field/entity-schema {}
-                                  :field/nullable?     false}))))))
+             #(v/validate-field "db" :entity.schema/test {:test-entity/double-field "bob"
+                                                          :test-entity/ref-field    {:a 1}}
+                                {:field/schema        {:db/ident     :test-entity/ref-field
+                                                       :db/valueType {:db/ident :db.type/ref}}
+                                 :field/entity-schema {:db/ident :some-schema} ;;fake entity-schema
+                                 :field/nullable?     false}))))))
 
 
+
+(defn create-test-db [entity-schema-tx]
+  (let [conn (es/create-bootstrapped-conn)
+        fields [{:db/id                 (d/tempid :db.part/db)
+                 :db.install/_attribute :db.part/db
+                 :db/ident              :test-entity/string-field
+                 :db/valueType          :db.type/string
+                 :db/cardinality        :db.cardinality/one}
+
+                {:db/id                 (d/tempid :db.part/db)
+                 :db.install/_attribute :db.part/db
+                 :db/ident              :test-entity/string-field2
+                 :db/valueType          :db.type/string
+                 :db/cardinality        :db.cardinality/one}
+
+                {:db/id                 (d/tempid :db.part/db)
+                 :db.install/_attribute :db.part/db
+                 :db/ident              :test-entity/test-entity2
+                 :db/valueType          :db.type/ref
+                 :db/cardinality        :db.cardinality/one}
+
+                {:db/id                 (d/tempid :db.part/db)
+                 :db.install/_attribute :db.part/db
+                 :db/ident              :test-entity/ref-field
+                 :db/valueType          :db.type/ref
+                 :db/cardinality        :db.cardinality/one}]]
+
+    @(d/transact conn fields)
+    @(d/transact conn [entity-schema-tx])
+    (d/db conn)))
 
 
 
 (deftest get-ref-val-test
   (testing "Simple"
-    (let [entity-schema {:entity.schema/fields [{:field/schema    {:db/ident     :test-entity/string-field
-                                                                   :db/valueType :db.type/string}
-                                                 :field/nullable? false}]}]
+    (is (= {:test-entity/string-field "Bob"}
 
-      (is (= {:test-entity/string-field "Bob"}
+           (v/validate (create-test-db {:db/id                (d/tempid :db.part/user)
+                                        :db/ident             :entity.schema/test-entity
 
-             (v/validate-entity
+                                        :entity.schema/fields [{:db/id           (d/tempid :db.part/user)
+                                                                :field/schema    :test-entity/string-field
+                                                                :field/nullable? false}]})
 
-               {:test-entity/string-field "Bob"}
+                       {:db/ident                 :entity.schema/test-entity
+                        :event/instant            (Date.)
+                        :test-entity/string-field "Bob"}
 
+                       ))))
 
-               entity-schema)))))
 
   (testing "Nested"
+    (is (= {:test-entity/test-entity2 {:test-entity/string-field2 "Bob"}}
+
+           (v/validate (create-test-db {:db/id                (d/tempid :db.part/user)
+                                        :db/ident             :entity.schema/test-entity
+                                        :entity.schema/fields [{:db/id               (d/tempid :db.part/user)
+                                                                :field/schema        :test-entity/test-entity2
+                                                                :field/entity-schema {:db/id (d/tempid :db.part/user)
+                                                                                      :db/ident             :entity.schema/test-entity2
+                                                                                      :entity.schema/fields [{:db/id           (d/tempid :db.part/user)
+                                                                                                              :field/schema    :test-entity/string-field2
+                                                                                                              :field/nullable? false}]}
+                                                                :field/nullable?     false}]})
+
+                       {:db/ident              :entity.schema/test-entity
+                        :event/instant         (Date.)
+                        :test-entity/test-entity2 {:db/ident :entity.schema/test-entity2
+                                                   :event/instant (Date.)
+                                                   :test-entity/string-field2 "Bob"}}
+
+                       ))))
+
+
+
+  (testing "Type error"
+    (is (= {:test-entity/ref-field {:error/data    {:actual-type   java.lang.String
+                                                    :expected-type :db.type/ref
+                                                    :value         "Bob"}
+                                    :error/message "Incorrect Value Type"
+                                    :error/type    :error.type/incorrect-type}}
+
+           (v/validate-entity
+             (create-test-db {:db/id                (d/tempid :db.part/user)
+                              :db/ident             :entity.schema/test-entity
+                              :entity.schema/fields [{:field/schema        {:db/ident     :test-entity/ref-field
+                                                                            :db/valueType {:db/ident :db.type/ref}}
+                                                      :field/entity-schema {:db/ident             :entity.schema/ref-field
+                                                                            :entity.schema/fields [{:field/schema    {:db/ident     :test-entity/string-field2
+                                                                                                                      :db/valueType {:db/ident :db.type/string}}
+                                                                                                    :field/nullable? false}]}
+                                                      :field/nullable?     false}
+
+                                                     ]})
+
+             {:db/ident              :entity.schema/test-entity
+              :event/instant         (Date.)
+              :test-entity/ref-field "Bob"}))))
+
+  (testing "Nested error"
     (let [entity-schema {:entity.schema/fields [{:field/schema        {:db/ident     :test-entity/ref-field
-                                                                       :db/valueType :db.type/ref}
+                                                                       :db/valueType {:db/ident :db.type/ref}}
                                                  :field/entity-schema {:db/ident             :entity.schema/ref-field
-                                                                       :entity.schema/fields [{:field/schema    {:db/ident     :test-entity/string-field2
-                                                                                                                 :db/valueType :db.type/string}
+                                                                       :entity.schema/fields [{:field/schema    {:db/ident     :test-entity/string-field
+                                                                                                                 :db/valueType {:db/ident :db.type/string}}
                                                                                                :field/nullable? false}]}
-                                                 :field/nullable?     false}]}]
+                                                 :field/nullable?     false}
 
-      (is (= {:test-entity/ref-field {:test-entity/string-field2 "Bob"}}
+                                                ]}]
 
-             (v/validate-entity
+      (is (= {:test-entity/ref-field {:error/data    {:actual-type   java.lang.Double
+                                                      :expected-type :db.type/string
+                                                      :value         "Bob"}
+                                      :error/message "Incorrect Value Type"
+                                      :error/type    :error.type/incorrect-type}}
 
-               {:test-entity/string-field2 "Bob"}
+             (v/validate-entity (create-test-db)
 
-
-               entity-schema)))))
-
-  (testing "Nested with 2 ref fields referring to the same value"
-    (let [entity-schema {:entity.schema/fields [{:field/schema        {:db/ident     :test-entity/ref-field
-                                                                       :db/valueType :db.type/ref}
-                                                 :field/entity-schema {:db/ident             :entity.schema/ref-field
-                                                                       :entity.schema/fields [{:field/schema    {:db/ident     :test-entity/string-field2
-                                                                                                                 :db/valueType :db.type/string}
-                                                                                               :field/nullable? false}]}
-                                                 :field/nullable?      false }
-
-                                                {:field/schema        {:db/ident     :test-entity/ref-field2
-                                                                       :db/valueType :db.type/ref}
-                                                 :field/entity-schema {:db/ident             :entity.schema/ref-field
-                                                                       :entity.schema/fields [{:field/schema    {:db/ident     :test-entity/string-field2
-                                                                                                                 :db/valueType :db.type/string}
-                                                                                               :field/nullable? false}]}
-                                                 :field/nullable?      false }]}]
-
-      (is (= {:test-entity/ref-field  {:test-entity/string-field2 "Bob"}
-              :test-entity/ref-field2 {:test-entity/string-field2 "Bob"}}
-
-             (v/validate-entity
-
-               {:test-entity/string-field2 "Bob"}
-
-
-               entity-schema)))))
-
-  (testing "Nested entity of same type being referred to by 2 different fields"
-    (let [entity-schema {:entity.schema/fields [{:field/schema        {:db/ident     :test-entity/ref-field
-                                                                       :db/valueType :db.type/ref}
-                                                 :field/entity-schema {:db/ident             :entity.schema/ref-field
-                                                                       :entity.schema/fields [{:field/schema    {:db/ident     :test-entity/string-field2
-                                                                                                                 :db/valueType :db.type/string}
-                                                                                               :field/nullable? false}]}
-                                                 :field/nullable?      false }
-
-                                                {:field/schema        {:db/ident     :test-entity/ref-field2
-                                                                       :db/valueType :db.type/ref}
-                                                 :field/entity-schema {:db/ident             :entity.schema/ref-field
-                                                                       :entity.schema/fields [{:field/schema    {:db/ident     :test-entity/string-field2
-                                                                                                                 :db/valueType :db.type/string}
-                                                                                               :field/nullable? false}]}
-                                                 :field/nullable?      false }]}]
-
-      (is (= {:test-entity/ref-field  {:test-entity/string-field2 "Bob"}
-              :test-entity/ref-field2 {:test-entity/string-field2 "Fred"}}
-
-             (v/validate-entity
-
-               {[:test-entity/ref-field :test-entity/string-field2]  "Bob"
-                [:test-entity/ref-field2 :test-entity/string-field2] "Fred"}
+                                {:test-entity/ref-field {:test-entity/string-field 10}}
 
 
 
-               entity-schema))))))
+                                entity-schema))))))

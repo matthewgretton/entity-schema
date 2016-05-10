@@ -1,6 +1,7 @@
-(ns entity-schema.from-yaml
+(ns entity-schema.yaml-conversion
   (:require [clj-yaml.core :as yaml]
-            [datomic.api :as d]))
+            [datomic.api :as d]
+            [entity-schema.entity-schema :as es]))
 
 
 (def yaml-datomic-type-map
@@ -51,13 +52,13 @@
         (assoc datomic-field :db/index true))
       datomic-field)))
 
-(defn datomic-fields-from-yaml [{:keys [:name :columns :natural_key :indexes]}]
+(defn yaml->field-txs [{:keys [:name :columns :natural_key :indexes]}]
   (->> columns
        (filter #(not= (:name %) "id"))                    ;id field will be created automatically
        (map #(create-datomic-field name indexes natural_key %))
        (into [])))
 
-(defn clojure-from-yaml [path]
+(defn read-yaml [path]
   (->> (clojure.java.io/resource path)
        (slurp)
        (yaml/parse-string)))
@@ -70,10 +71,8 @@
 (defn create-entity-schema-ident [name]
   (keyword "entity.schema" (prettify-name name)))
 
-(defn entity-schema-ident-from-yaml [{:keys [:name]}]
-  (create-entity-schema-ident name))
 
-(defn datomic-entity-schema-from-yaml [{:keys [:name :natural_key :columns]}]
+(defn yaml->entity-schema-tx [{:keys [:name :natural_key :columns]}]
   {
    :db/id (d/tempid :db.part/user)
    :db/ident (create-entity-schema-ident name)
@@ -85,17 +84,6 @@
                                    (map #(create-db-ident name %))
                                    (into #{}))
    })
-
-(defn create-entity-schema [conn file-path]
-  (let [yaml (clojure-from-yaml file-path)
-        fields (datomic-fields-from-yaml yaml)
-        entity-schema (datomic-entity-schema-from-yaml yaml)]
-    @(d/transact conn fields)
-    @(d/transact conn [entity-schema])
-    (create-entity-schema-ident (:name yaml))))
-
-
-
 
 
 

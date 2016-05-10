@@ -2,58 +2,6 @@
   (:require [datomic.api :as d]))
 
 
-(defn- recursive-pull [db result]
-  (let [enum-fields #{:db/valueType :db/cardinality}]
-    (cond
-      (map? result) (->> (dissoc (d/pull db '[*] (:db/id result)) :db/id)
-                         (map (fn [[k v]]
-                                [k (let [m (recursive-pull db v)]
-                                     (if (contains? enum-fields k)
-                                       (:db/ident m)
-                                       m))]))
-                         (into {}))
-
-      (coll? result) (->> result
-                          (map (fn [v]
-                                 (recursive-pull db v)))
-                          (into (empty result)))
-      :else result)))
-
-(defn pull-expanded-schema [db id]
-  (recursive-pull db {:db/id id}))
-
-
-
-(defn pull-schema [db id]
-  (let [{:keys [:db/ident :entity.schema/fields :entity.schema/natural-key]}
-        (d/pull db '[:db/ident
-                     {:entity.schema/fields [{:field/schema [:db/ident]}
-                                             :field/nullable?
-                                             {:field/entity-schema [:db/ident]}]}
-                     {:entity.schema/natural-key [:db/ident]}] id)]
-    {
-     :db/ident                  ident
-     :entity.schema/fields      (->> fields
-                                     (map (fn [{:keys [:field/schema
-                                                       :field/nullable?
-                                                       :field/entity-schema]}]
-                                            (let [stub {:field/schema        (:db/ident schema)
-                                                        :field/nullable?     nullable?}]
-                                              (if entity-schema
-                                                (assoc stub :field/entity-schema (:db/ident entity-schema))
-                                                stub))
-                                            ))
-                                     (filter (comp not nil? second))
-                                     (into #{}))
-
-     :entity.schema/natural-key (->> natural-key
-                                     (map :db/ident)
-                                     (into #{}))}))
-
-
-(defn get-schema [db {:keys [:db/ident :event/instant]}]
-  (pull-expanded-schema (d/as-of db instant) ident))
-
 
 
 (def entity-schema-fields
@@ -93,6 +41,28 @@
 
 
 
+
+
+(defn pull-schema [db entity-schema-id]
+  (d/pull db '[:db/ident
+               {:entity.schema/fields [{:field/schema [:db/ident
+                                                       {:db/cardinality [:db/ident]}
+                                                       {:db/valueType [:db/ident]}]}
+                                       :field/nullable?
+                                       {:field/entity-schema [:db/ident]}]}
+               {:entity.schema/natural-key [:db/ident]}] entity-schema-id))
+
+
+;;Derive schema implementations
+
+(defn derive-schema [db {:keys [:db/ident :event/instant] :as bob}]
+  (clojure.pprint/pprint "!!!!!!!!!!!")
+  (clojure.pprint/pprint db)
+  (clojure.pprint/pprint bob)
+  "Example of a simple schema derivation that returns a schema for the given ident, and instant"
+  (-> (d/as-of db instant)
+      (pull-schema ident)))
+
 (defn modify-entity-schema-optionality-tx [db entity-id field-id nullable?]
   (->> (d/pull db
                [{:entity.schema/fields [:db/id
@@ -108,7 +78,15 @@
 
 
 
-
+(defn create-bootstrapped-conn []
+  "Create an in memory database and bootstrap it with the underlying
+  entity schema data"
+  (let [uri "datomic:mem://entity-db"]
+    (d/delete-database uri)
+    (d/create-database uri)
+    (let [conn (d/connect uri)]
+      (bootstrap conn)
+      conn)))
 
 
 
