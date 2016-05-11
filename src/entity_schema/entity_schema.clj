@@ -55,13 +55,15 @@
 
 ;;Derive schema implementations
 
-(defn derive-schema [db {:keys [:db/ident :event/instant] :as bob}]
-  (clojure.pprint/pprint "!!!!!!!!!!!")
-  (clojure.pprint/pprint db)
-  (clojure.pprint/pprint bob)
+(defn derive-schema [db {:keys [:db/ident :event/instant] :as entity}]
   "Example of a simple schema derivation that returns a schema for the given ident, and instant"
+
+  (assert (not (nil? db)) "database snapshot is expected to be non null")
+  (assert (not (nil? entity)) "entity is expected to be non null")
+  (assert (not (nil? ident)) "ident is expected to be non null")
+  (assert (not (nil? instant)) "instant is expected to be non null")
   (-> (d/as-of db instant)
-      (pull-schema ident)))
+      (pull-schema  ident)))
 
 (defn modify-entity-schema-optionality-tx [db entity-id field-id nullable?]
   (->> (d/pull db

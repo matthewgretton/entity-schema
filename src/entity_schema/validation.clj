@@ -43,7 +43,7 @@
           :recognised-keys type-map}))
 
 (defn not-nullable-error [entity-ident field]
-  (error :error.type/nullable-field
+  (error :error.type/required-field
          "Required Field"
          {:field     field
           :entity-id entity-ident}))
@@ -61,28 +61,28 @@
 
 
 (defn validate-field [db
-                      entity-schema-id
+                     {schema-ident :db/ident}
                       entity
                       {nullable?                             :field/nullable?
                        {field-entity-schema :db/ident}       :field/entity-schema
-                       {ident                 :db/ident
+                       {field-ident                 :db/ident
                         {valueType :db/ident} :db/valueType} :field/schema}]
-  [ident (if-let [val (get entity ident)]
+  [field-ident (if-let [val (get entity field-ident)]
            (let [type-checked-val (validate-type valueType val)]
              (if (or (error? type-checked-val) (not= valueType :db.type/ref))
                type-checked-val
-               (->> (es/derive-schema db (get entity field-entity-schema))
+               (->> (es/derive-schema db (get entity field-ident))
                     (validate-entity db type-checked-val))))
            (if (not nullable?)
-             (not-nullable-error entity-schema-id ident)))])
+             (not-nullable-error schema-ident field-ident)))])
 
 (defn validate-entity
   [db
    entity
-   {:keys [:db/ident :entity.schema/fields]}]
+   {:keys [:entity.schema/fields] :as schema}]
   (->> fields
        (map (fn [field-schema]
-              (validate-field db ident entity field-schema)))
+              (validate-field db schema entity field-schema)))
        (filter (comp not nil? second))
        (into {})))
 
