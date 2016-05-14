@@ -104,7 +104,7 @@
   ([row entity-schema]
     (validate-row row [] entity-schema)))
 
-(defn validate-structure [db {:keys [:db/ident :event/instant] :as row}]
+(defn validate-structure [db {:keys [:db/ident :entity/instant] :as row}]
   (let [db-asof (d/as-of db instant)
         schema (es/pull-expanded-schema db-asof ident)]
     (validate-row row schema)))

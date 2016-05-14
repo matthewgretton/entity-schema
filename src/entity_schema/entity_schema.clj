@@ -55,13 +55,13 @@
 
 ;;Derive schema implementations
 
-(defn derive-schema [db {:keys [:db/ident :event/instant] :as entity}]
-  "Example of a simple schema derivation that returns a schema for the given ident, and instant"
 
-  (assert (not (nil? db)) "database snapshot is expected to be non null")
-  (assert (not (nil? entity)) "entity is expected to be non null")
-  (assert (not (nil? ident)) "ident is expected to be non null")
-  (assert (not (nil? instant)) "instant is expected to be non null")
+(require 'spyscope.core)
+(defn derive-schema [ db
+                     {:keys [:entity/instant] :as entity}
+                     {{:keys [:db/ident]} :field/entity-schema}]
+  "In this example the entity instant is used to look up the correct version of the schema specified in the field"
+  {:pre [(not (nil?  db)) (not (nil?  entity)) (not (nil? ident)) (not (nil? instant))]}
   (-> (d/as-of db instant)
       (pull-schema  ident)))
 
@@ -80,10 +80,10 @@
 
 
 
-(defn create-bootstrapped-conn []
+(defn create-and-bootstrapped-conn []
   "Create an in memory database and bootstrap it with the underlying
   entity schema data"
-  (let [uri "datomic:mem://entity-db"]
+  (let [uri (str "datomic:mem://entity-db-" (d/squuid))]
     (d/delete-database uri)
     (d/create-database uri)
     (let [conn (d/connect uri)]

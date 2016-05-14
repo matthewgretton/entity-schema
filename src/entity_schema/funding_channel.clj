@@ -2,13 +2,14 @@
   (:require [entity-schema.yaml-conversion :as fy]
             [datomic.api :as d]
             [entity-schema.validation :as v]
-            [entity-schema.entity-schema :as es])
-  (:import (java.util Date)))
+            [entity-schema.entity-schema :as es]
+            [spyscope.core :as spy])
+  (:import (java.util Date UUID)))
 
 
 
 
-(def conn (es/create-bootstrapped-conn))
+(def conn (es/create-and-bootstrapped-conn))
 
 ;;create yaml data structure from concentration_limit_dim.yml file
 (def cl-data (fy/read-yaml "dimensions/concentration_limit_dim.yml"))
@@ -43,14 +44,6 @@
 
 ;; (:db/ident e-entity-schema-tx) -> :entity.schema/eligibility-criterion
 (es/pull-schema (d/db conn) :entity.schema/eligibility-criterion)
-
-
-(es/derive-schema (d/db conn) {:event/instant (Date.)
-                               :db/ident      :entity.schema/eligibility-criterion})
-
-
-
-
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -93,32 +86,48 @@
 @(d/transact conn [add-ref-fields-to-fc-schema-tx])
 
 
+
 ;; An example of a funding channel entity with eligibility criterions and concentration limits
 (def full-fc-entity
-  {:db/ident                                     :entity.schema/funding-channel
-   :event/instant                                 (Date.)
+  {:entity/instant                               (Date.)
+   :funding-channel/funding-channel-uuid         (UUID/randomUUID)
    :funding-channel/name                         "Dorset Rise Ltd"
    :funding-channel/referral-only?               false
    :funding-channel/scale-allocation-percentage? true
-   :funding-channel/eligibility-criterions #{{:eligibility-criterion/criterion-type "Include"
-                                              :eligibility-criterion/criterion-attribute ":risk-band"
-                                              :eligibility-criterion/criterion-value "#{:Aplus :A :B :C :D}"}
-                                             {:eligibility-criterion/criterion-type "Include"
-                                              :eligibility-criterion/criterion-attribute ":secured"
-                                              :eligibility-criterion/criterion-value "#{false}"}}
+   :funding-channel/allocation-percentage        (BigDecimal/valueOf 0.7)
+   :funding-channel/eligibility-criterions       #{{:entity/instant                               (Date.)
+                                                    :eligibility-criterion/criterion-type      "Include"
+                                                    :eligibility-criterion/criterion-attribute ":risk-band"
+                                                    :eligibility-criterion/criterion-value     "#{:Aplus :A :B :C :D}"}
+                                                   {:entity/instant                               (Date.)
+                                                    :eligibility-criterion/criterion-type      "Include"
+                                                    :eligibility-criterion/criterion-attribute ":secured"
+                                                    :eligibility-criterion/criterion-value     "#{false}"}}
 
-   :funding-channel/concentration-limits #{{:eligibility-criterion/constraint-type "MaxAllocationLifetime"
-                                            :eligibility-criterion/constraint-attribute ":original-principal-cents"
-                                            :eligibility-criterion/constraint-value "1000"}
+   :funding-channel/concentration-limits         #{{:entity/instant                               (Date.)
+                                                    :concentration-limit/threshold        (float 0.7)
+                                                    :concentration-limit/constraint-type      "MaxAllocationLifetime"
+                                                    :concentration-limit/constrained-attribute ":original-principal-cents"
+                                                    :concentration-limit/constrained-value     "1000"}
 
-                                           {:eligibility-criterion/constraint-type "MaxAllocationMonthly"
-                                            :eligibility-criterion/constraint-attribute ":original-principal-cents"
-                                            :eligibility-criterion/constraint-value "100"}}})
+                                                   {:entity/instant                               (Date.)
+                                                    :concentration-limit/threshold (float 0.7)
+                                                    :concentration-limit/constraint-type      "MaxAllocationMonthly"
+                                                    :concentration-limit/constrained-attribute ":original-principal-cents"
+                                                    :concentration-limit/constrained-value     "100"}}})
+
+(->> (es/pull-schema (d/db conn) :entity.schema/funding-channel)
+     (:entity.schema/fields)
+     (map :field/schema)
+     (map :db/ident))
+
+(->> (v/validate (d/db conn)
+                 :entity.schema/funding-channel
+                 full-fc-entity))
 
 
-(es/pull-schema (d/db conn) :entity.schema/concentration-limit)
 
-(v/validate-entity (d/db conn) full-fc-entity)
+
 
 
 
