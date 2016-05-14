@@ -131,7 +131,7 @@
                  :db/ident              :test-entity/ref-field
                  :db/valueType          :db.type/ref
                  :db/cardinality        :db.cardinality/one}
-                
+
                 {:db/id                 (d/tempid :db.part/db)
                  :db.install/_attribute :db.part/db
                  :db/ident              :test-entity/ref-many-field
