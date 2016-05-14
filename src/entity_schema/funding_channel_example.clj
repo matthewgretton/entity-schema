@@ -1,4 +1,4 @@
-(ns entity-schema.funding-channel
+(ns entity-schema.funding-channel_example
   (:require [entity-schema.yaml-conversion :as fy]
             [datomic.api :as d]
             [entity-schema.validation :as v]
@@ -94,7 +94,7 @@
    :funding-channel/name                         "Dorset Rise Ltd"
    :funding-channel/referral-only?               false
    :funding-channel/scale-allocation-percentage? true
-   :funding-channel/allocation-percentage        (BigDecimal/valueOf 0.7)
+   :funding-channel/allocation-percentage        (bigdec 0.7)
    :funding-channel/eligibility-criterions       #{{:entity/instant                               (Date.)
                                                     :eligibility-criterion/criterion-type      "Include"
                                                     :eligibility-criterion/criterion-attribute ":risk-band"
@@ -116,7 +116,7 @@
                                                     :concentration-limit/constrained-attribute ":original-principal-cents"
                                                     :concentration-limit/constrained-value     "100"}}})
 
-(->> (es/pull-schema (d/db conn) :entity.schema/funding-channel)
+(->> (es/pull-schema (d/db conn) :entity.schema/concentration-limit)
      (:entity.schema/fields)
      (map :field/schema)
      (map :db/ident))
