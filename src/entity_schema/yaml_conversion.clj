@@ -54,32 +54,36 @@
 
 (defn yaml->field-txs [{:keys [:name :columns :natural_key :indexes]}]
   (->> columns
-       (filter #(not= (:name %) "id"))                    ;id field will be created automatically
+       (filter #(not= (:name %) "id"))                      ;id field will be created automatically
        (map #(create-datomic-field name indexes natural_key %))
        (into [])))
 
-(defn read-yaml [path]
+(defn read-yaml-from-class-path [path]
   (->> (clojure.java.io/resource path)
        (slurp)
        (yaml/parse-string)))
 
 (defn create-entity-schema-field [entity-name {:keys [:name :nullable]}]
-  {:db/id (d/tempid :db.part/user)
-   :field/schema (create-db-ident entity-name name)
+  {:db/id           (d/tempid :db.part/user)
+   :field/schema    (create-db-ident entity-name name)
    :field/nullable? nullable})
 
-(defn create-entity-schema-ident [name]
-  (keyword "entity.schema" (prettify-name name)))
 
 
 (defn yaml->entity-schema-tx [{:keys [:name :natural_key :columns]}]
   {
-   :db/id (d/tempid :db.part/user)
-   :db/ident (create-entity-schema-ident name)
-   :entity.schema/fields (->> columns
-                              (filter #(not= (:name %) "id"))
-                              (map #(create-entity-schema-field name %))
-                              (into #{}))
+   :db/id                     (d/tempid :db.part/user)
+
+   :db/ident                  (keyword "entity.schema" (prettify-name name))
+
+   :entity.schema/type        {:db/id    (d/tempid :db.part/user)
+                               :db/ident (keyword "entity.schema.type" (prettify-name name))}
+
+   :entity.schema/fields      (->> columns
+                                   (filter #(not= (:name %) "id"))
+                                   (map #(create-entity-schema-field name %))
+                                   (into #{}))
+
    :entity.schema/natural-key (->> (to-coll natural_key)
                                    (map #(create-db-ident name %))
                                    (into #{}))

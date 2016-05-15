@@ -3,16 +3,20 @@
             [datomic.api :as d]
             [entity-schema.validation :as v]
             [entity-schema.entity-schema :as es]
-            [spyscope.core :as spy])
+            [entity-schema.datomic-helper :as dh])
   (:import (java.util Date UUID)))
 
+;; set up Datomic database and get a database connection
+(def uri (dh/create-in-mem-db-uri "fc-entity-db"))
 
+(def conn (do (d/create-database uri)
+              (d/connect uri)))
 
-
-(def conn (es/create-and-bootstrapped-conn))
+;; boot-strap entity schema fields
+@(d/transact conn es/entity-schema-fields)
 
 ;;create yaml data structure from concentration_limit_dim.yml file
-(def cl-data (fy/read-yaml "dimensions/concentration_limit_dim.yml"))
+(def cl-data (fy/read-yaml-from-class-path "dimensions/concentration_limit_dim.yml"))
 
 ;;convert yaml data to field transaction data
 (def cl-field-txs (fy/yaml->field-txs cl-data))
@@ -29,21 +33,21 @@
 @(d/transact conn [cl-schema-tx])
 
 ;;eligibility criteria
-(def e-data (fy/read-yaml "dimensions/eligibility_criteria_dim.yml"))
+(def e-data (fy/read-yaml-from-class-path "dimensions/eligibility_criteria_dim.yml"))
 (def e-field-txs (fy/yaml->field-txs e-data))
 @(d/transact conn e-field-txs)
 (def e-schema-tx (fy/yaml->entity-schema-tx e-data))
 @(d/transact conn [e-schema-tx])
 
 ;;funding channel
-(def fc-data (fy/read-yaml "dimensions/funding_channel_dim.yml"))
+(def fc-data (fy/read-yaml-from-class-path "dimensions/funding_channel_dim.yml"))
 (def fc-field-txs (fy/yaml->field-txs fc-data))
 @(d/transact conn fc-field-txs)
 (def fc-schema-tx (fy/yaml->entity-schema-tx fc-data))
 @(d/transact conn [fc-schema-tx])
 
 ;; (:db/ident e-entity-schema-tx) -> :entity.schema/eligibility-criterion
-(es/pull-schema (d/db conn) :entity.schema/eligibility-criterion)
+(es/pull-schema-by-type (d/db conn) :entity.schema.type/funding-channel)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -76,11 +80,11 @@
   {:db/id                :entity.schema/funding-channel
    :entity.schema/fields [{:db/id               (d/tempid :db.part/user)
                            :field/schema        :funding-channel/concentration-limits
-                           :field/nullable?     false
-                           :field/entity-schema :entity.schema/concentration-limit}
+                           :field/entity-schema-type :entity.schema.type/concentration-limit
+                           :field/nullable?     false}
                           {:db/id               (d/tempid :db.part/user)
                            :field/schema        :funding-channel/eligibility-criterions
-                           :field/entity-schema :entity.schema/eligibility-criterion
+                           :field/entity-schema-type :entity.schema.type/eligibility-criterion
                            :field/nullable?     false}]})
 
 @(d/transact conn [add-ref-fields-to-fc-schema-tx])
@@ -89,41 +93,88 @@
 
 ;; An example of a funding channel entity with eligibility criterions and concentration limits
 (def full-fc-entity
-  {:entity/instant                               (Date.)
+  {:entity/schema :entity.schema/funding-channel
+   :entity/instant                               (Date.)
    :funding-channel/funding-channel-uuid         (UUID/randomUUID)
    :funding-channel/name                         "Dorset Rise Ltd"
    :funding-channel/referral-only?               false
    :funding-channel/scale-allocation-percentage? true
    :funding-channel/allocation-percentage        (bigdec 0.7)
    :funding-channel/eligibility-criterions       #{{:entity/instant                               (Date.)
+                                                    :entity/schema :entity.schema/eligibility-criterion
                                                     :eligibility-criterion/criterion-type      "Include"
                                                     :eligibility-criterion/criterion-attribute ":risk-band"
                                                     :eligibility-criterion/criterion-value     "#{:Aplus :A :B :C :D}"}
                                                    {:entity/instant                               (Date.)
+                                                    :entity/schema :entity.schema/eligibility-criterion
                                                     :eligibility-criterion/criterion-type      "Include"
                                                     :eligibility-criterion/criterion-attribute ":secured"
                                                     :eligibility-criterion/criterion-value     "#{false}"}}
 
    :funding-channel/concentration-limits         #{{:entity/instant                               (Date.)
+                                                    :entity/schema :entity.schema/concentration-limit
                                                     :concentration-limit/threshold        (float 0.7)
                                                     :concentration-limit/constraint-type      "MaxAllocationLifetime"
                                                     :concentration-limit/constrained-attribute ":original-principal-cents"
                                                     :concentration-limit/constrained-value     "1000"}
 
                                                    {:entity/instant                               (Date.)
+                                                    :entity/schema :entity.schema/concentration-limit
                                                     :concentration-limit/threshold (float 0.7)
                                                     :concentration-limit/constraint-type      "MaxAllocationMonthly"
                                                     :concentration-limit/constrained-attribute ":original-principal-cents"
                                                     :concentration-limit/constrained-value     "100"}}})
 
-(->> (es/pull-schema (d/db conn) :entity.schema/concentration-limit)
+(->> (es/pull-schema (d/db conn) :entity.schema/funding-channel)
      (:entity.schema/fields)
      (map :field/schema)
      (map :db/ident))
 
-(->> (v/validate (d/db conn)
-                 :entity.schema/funding-channel
-                 full-fc-entity))
+(v/validate (d/db conn) full-fc-entity)
+
+(def ref-field-txs
+  [;; create a join field from function channel to elibility criteria, not it's a cardinality many field
+   {:db/id                 (d/tempid :db.part/db)           ;; this creates a temporary id in the db partition
+    :db.install/_attribute :db.part/db
+    :db/ident              :concentration-limit/risk-bands
+    :db/valueType          :db.type/ref
+    :db/cardinality        :db.cardinality/many}
+
+   {:db/id                 (d/tempid :db.part/db)
+    :db.install/_attribute :db.part/db
+    :db/ident              :concentration-limit/secured?
+    :db/valueType          :db.type/ref
+    :db/cardinality        :db.cardinality/true}
+
+
+   {:db/id                 (d/tempid :db.part/db)
+    :db.install/_attribute :db.part/db
+    :db/ident              :eligibility-criterion/secured?
+    :db/valueType          :db.type/ref
+    :db/cardinality        :db.cardinality/true}
+
+   {:db/id                 (d/tempid :db.part/db)
+    :db.install/_attribute :db.part/db
+    :db/ident              :eligibility-criterion/original-principal-cents
+    :db/valueType          :db.type/long
+    :db/cardinality        :db.cardinality/true}
+
+
+
+   ])
+
+(def include-risk-schema
+  [{:db/id (d/tempid :db.part/user)
+   :db/ident :entity.schema/concetration-limit-include-risk
+   :entity.schema/fields #{{:db/id (d/tempid :db.part/user)
+                            :field/schema :concentration-limit/risk-bands}}}
+
+   {:db/id (d/tempid :db.part/user)
+    :db/ident :entity.schema/concetration-limit-secured
+    :entity.schema/fields #{{:db/id (d/tempid :db.part/user)
+                             :field/schema :concentration-limit/secured?}}}
+
+   ])
 
 
 

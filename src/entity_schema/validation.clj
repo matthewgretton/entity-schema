@@ -59,15 +59,14 @@
        (incorrect-type-error value type))
      (unrecognised-type-error type datomic-java-type-map))))
 
-
 (defn validate-value [db field val]
   (let [valueType (get-in field [:field/schema :db/valueType :db/ident])
+        schema-type (get-in field [:field/entity-schema-type])
         type-checked-val (validate-type valueType val)]
     (if (or (error? type-checked-val) (not= valueType :db.type/ref))
       type-checked-val
-      (->> (es/derive-schema db type-checked-val field)
+      (->> (es/derive-schema db schema-type type-checked-val)
            (validate-entity db type-checked-val)))))
-
 
 (defn validate-field [db entity-schema field entity]
   (let [{nullable?                                 :field/nullable?
@@ -85,7 +84,6 @@
        (if (not nullable?)
          (not-nullable-error schema-id field-ident)))]))
 
-
 (defn validate-entity
   [db
    entity
@@ -97,9 +95,11 @@
        (into {})))
 
 (defn validate
-  [db schema-id entity]
-  (->> (es/derive-schema db entity {:field/entity-schema {:db/ident schema-id}})
+  ([db type entity ]
+  (->> (es/derive-schema db type entity)
        (validate-entity db entity)))
+  ([db entity]
+    (validate db nil entity)))
 
 
 
