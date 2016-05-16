@@ -61,11 +61,11 @@
 
 (defn validate-value [db field val]
   (let [valueType (get-in field [:field/schema :db/valueType :db/ident])
-        schema-type (get-in field [:field/entity-schema-type])
-        type-checked-val (validate-type valueType val)]
+        schema-type (get-in field [:field/entity-schema-type :db/ident])
+        {:keys [:entity/instant :entity/type] :as type-checked-val} (validate-type valueType val)]
     (if (or (error? type-checked-val) (not= valueType :db.type/ref))
       type-checked-val
-      (->> (es/derive-schema db schema-type type-checked-val)
+      (->> (es/derive-schema db instant schema-type type)
            (validate-entity db type-checked-val)))))
 
 (defn validate-field [db entity-schema field entity]
@@ -95,11 +95,9 @@
        (into {})))
 
 (defn validate
-  ([db type entity ]
-  (->> (es/derive-schema db type entity)
-       (validate-entity db entity)))
-  ([db entity]
-    (validate db nil entity)))
+  ([db schema-type {:keys [:entity/instant :entity/type] :as entity} ]
+  (->> (es/derive-schema db instant schema-type type)
+       (validate-entity db entity))))
 
 
 

@@ -47,7 +47,7 @@
 @(d/transact conn [fc-schema-tx])
 
 ;; (:db/ident e-entity-schema-tx) -> :entity.schema/eligibility-criterion
-(es/pull-schema-by-type (d/db conn) :entity.schema.type/funding-channel)
+(es/pull-schema (d/db conn) :entity.schema.type/funding-channel)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -125,7 +125,7 @@
                                                     :concentration-limit/constrained-attribute ":original-principal-cents"
                                                     :concentration-limit/constrained-value     "100"}}})
 
-(->> (es/pull-schema (d/db conn) :entity.schema/funding-channel)
+(->> (es/pull-schema-by-id (d/db conn) :entity.schema/funding-channel)
      (:entity.schema/fields)
      (map :field/schema)
      (map :db/ident))
