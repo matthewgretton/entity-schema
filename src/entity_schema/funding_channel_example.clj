@@ -133,7 +133,8 @@
 (v/validate(d/db conn)  :entity.schema.type/funding-channel full-fc-entity)
 
 (def schema
-  {})
+  {:db/id (d/tempid :db.part/user)
+   :})
 
 (def ref-field-txs
   [;; create a join field from function channel to elibility criteria, not it's a cardinality many field

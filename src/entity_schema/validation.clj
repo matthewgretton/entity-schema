@@ -42,11 +42,11 @@
          {:type            type
           :recognised-keys type-map}))
 
-(defn not-nullable-error [entity-ident field]
+(defn not-nullable-error [type-ident field]
   (error :error.type/required-field
          "Required Field"
          {:field     field
-          :entity-id entity-ident}))
+          :type type-ident}))
 
 (defn error? [v]
   (and (map? v) (contains? v :error/type)))
@@ -72,7 +72,7 @@
   (let [{nullable?                                 :field/nullable?
          {field-ident             :db/ident
           {cardinality :db/ident} :db/cardinality} :field/schema} field
-        {schema-id :db/ident} entity-schema]
+        {{type-id :db/ident} :entity.schema/type} entity-schema]
     [field-ident
      (if (contains? entity field-ident)
        (let [val (get entity field-ident)]
@@ -82,7 +82,7 @@
              #{(validate-value db field val)})
            (validate-value db field val)))
        (if (not nullable?)
-         (not-nullable-error schema-id field-ident)))]))
+         (not-nullable-error type-id field-ident)))]))
 
 (defn validate-entity
   [db
