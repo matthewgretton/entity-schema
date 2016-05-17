@@ -330,4 +330,69 @@
                (v/validate
                  :entity.schema.type/test-type
                  {:entity/instant                (Date.)
-                  :test-entity/string-many-field "Bob"}))))))
+                  :test-entity/string-many-field "Bob"})))))
+
+  (testing "Test matching multiple versons of one shcema"
+    (is (= {:test-entity/string-field "Bob"}
+
+           (-> (create-db [{:db/id                (d/tempid :db.part/user)
+
+                            :entity.schema/type   {:db/id    (d/tempid :db.part/user -1)
+                                                   :db/ident :entity.schema.type/test-type}
+                            :entity.schema/entity-type {:db/id (d/tempid :db.part/user)
+                                                        :db/ident :entity.type/test-type}
+                            :entity.schema/fields [{:db/id           (d/tempid :db.part/user)
+                                                    :field/schema    :test-entity/string-field
+                                                    :field/nullable? false}]}
+
+                           {:db/id                (d/tempid :db.part/user)
+
+                            :entity.schema/type   {:db/id    (d/tempid :db.part/user -1)
+                                                   :db/ident :entity.schema.type/test-type}
+
+                            :entity.schema/entity-type {:db/id (d/tempid :db.part/user)
+                                                        :db/ident :entity.type/test-type2}
+
+                            :entity.schema/fields [{:db/id           (d/tempid :db.part/user)
+                                                    :field/schema    :test-entity/string-field
+                                                    :field/nullable? false}
+                                                   {:db/id           (d/tempid :db.part/user)
+                                                    :field/schema    :test-entity/string-field2
+                                                    :field/nullable? false}]}])
+               (v/validate
+                 :entity.schema.type/test-type
+                 {:entity/instant                (Date.)
+                  :entity/type :entity.type/test-type
+                  :test-entity/string-field "Bob"})))))
+
+  (testing "Test Error on not suppying enough info to resolve schema"
+    (is (thrown-with-msg? AssertionError #"Assert failed: There is more than one schema of type" (= {:test-entity/string-field "Bob"}
+
+           (-> (create-db [{:db/id                (d/tempid :db.part/user)
+
+                            :entity.schema/type   {:db/id    (d/tempid :db.part/user -1)
+                                                   :db/ident :entity.schema.type/test-type}
+                            :entity.schema/entity-type {:db/id (d/tempid :db.part/user)
+                                                        :db/ident :entity.type/test-type}
+                            :entity.schema/fields [{:db/id           (d/tempid :db.part/user)
+                                                    :field/schema    :test-entity/string-field
+                                                    :field/nullable? false}]}
+
+                           {:db/id                (d/tempid :db.part/user)
+
+                            :entity.schema/type   {:db/id    (d/tempid :db.part/user -1)
+                                                   :db/ident :entity.schema.type/test-type}
+
+                            :entity.schema/entity-type {:db/id (d/tempid :db.part/user)
+                                                        :db/ident :entity.type/test-type2}
+
+                            :entity.schema/fields [{:db/id           (d/tempid :db.part/user)
+                                                    :field/schema    :test-entity/string-field
+                                                    :field/nullable? false}
+                                                   {:db/id           (d/tempid :db.part/user)
+                                                    :field/schema    :test-entity/string-field2
+                                                    :field/nullable? false}]}])
+               (v/validate
+                 :entity.schema.type/test-type
+                 {:entity/instant                (Date.)
+                  :test-entity/string-field "Bob"})))))))

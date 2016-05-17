@@ -130,7 +130,10 @@
      (map :field/schema)
      (map :db/ident))
 
-(v/validate (d/db conn) full-fc-entity)
+(v/validate(d/db conn)  :entity.schema.type/funding-channel full-fc-entity)
+
+(def schema
+  {})
 
 (def ref-field-txs
   [;; create a join field from function channel to elibility criteria, not it's a cardinality many field
