@@ -57,6 +57,7 @@
 
 (defn pull-schema-by-id [db entity-schema-id]
   (d/pull db '[:db/ident
+              { :entity.schema/type [:db/ident]}
                {:entity.schema/fields [{:field/schema [:db/ident
                                                        {:db/cardinality [:db/ident]}
                                                        {:db/valueType [:db/ident]}]}
@@ -65,7 +66,7 @@
                {:entity.schema/natural-key [:db/ident]}] entity-schema-id))
 
 
-(defn pull-schema
+(defn pull-schema-by-type
   ([db schema-type entity-type]
    (->> (d/q '[:find ?e
                :in $ ?s-type ?e-type
@@ -85,24 +86,27 @@
 
 
 ;; So every schema has a unique reference, it is either just the schema type or the schema type and the entity type???
-(defn derive-schema [db
-                     instant
-                     schema-type
-                     entity-type]
+(defn derive-schema [db schema-type entity-type]
   "Derive the schema from the entity"
-  {:pre [(not (nil? db)) (not (nil? schema-type)) (not (nil? instant))]}
-
-  (let [db-instant (d/as-of db instant)]
-    ;the database asof the time in the entity
-    (if (nil? entity-type)
-      (let [pulled-schemas (pull-schema db-instant schema-type)]
-        (assert (= (count pulled-schemas) 1) (str "There is more than one schema of type " schema-type " " pulled-schemas))
-        (first pulled-schemas))
-      (pull-schema db schema-type entity-type))))
+  (assert (not (nil? db)))
+  (assert (not (nil? schema-type)))
+  (if (nil? entity-type)
+    (let [pulled-schemas (pull-schema-by-type db schema-type)]
+      (assert (= (count pulled-schemas) 1) (str "There is more than one schema of type " schema-type " " pulled-schemas))
+      (first pulled-schemas))
+    (pull-schema-by-type db schema-type entity-type)))
 
 
 
-
+(defn set-nullibility?-tx [db entity-id field-id nullable?]
+  (->> (d/q '[:find ?f
+              :in $ ?e ?s
+              :where [?e :entity.schema/fields ?f]
+              [?f :field/schema ?s]] db entity-id field-id)
+       (first)
+       (map (fn [f]
+              [:db/add f :field/nullable? nullable?]))
+       (first)))
 
 
 

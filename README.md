@@ -20,3 +20,11 @@ Once you've done that, you should be able run
 
 to ensure you download dependencies.
 
+
+When using Datomic the symbols aren’t resolved in the editor or the REPL due to the fact that Datomic is distributed
+without source code. To work around the issue do the following:
+
+- Download https://cursive-ide.com/datomic-stubs-0.9.5153.jar
+- Install that jar to your local repository cache using mvn install:install-file -Dfile=datomic-stubs-0.9.5153.jar -DartifactId=datomic-stubs -Dversion=0.9.5153 -DgroupId=cursive -Dpackaging=jar
+- Add these stubs to your project: [cursive/datomic-stubs "0.9.5153" :scope "provided"]
+
