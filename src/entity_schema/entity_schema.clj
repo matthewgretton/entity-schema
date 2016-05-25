@@ -45,7 +45,7 @@
 
    {:db/id                 (d/tempid :db.part/db)
     :db.install/_attribute :db.part/db
-    :db/ident              :entity.schema/entity-type
+    :db/ident              :entity.schema/sub-type
     :db/valueType          :db.type/ref
     :db/index              true
     :db/cardinality        :db.cardinality/one}
@@ -72,7 +72,7 @@
                :in $ ?s-type ?e-type
                :where
                [?e :entity.schema/type ?s-type]
-               [?e :entity.schema/entity-type ?e-type]] db schema-type entity-type)
+               [?e :entity.schema/sub-type ?e-type]] db schema-type entity-type)
         (map first)
         (map (partial pull-schema-by-id db))
         (first)))                                           ;;Add check ???
@@ -92,9 +92,22 @@
   (assert (not (nil? schema-type)))
   (if (nil? entity-type)
     (let [pulled-schemas (pull-schema-by-type db schema-type)]
-      (assert (= (count pulled-schemas) 1) (str "There is more than one schema of type " schema-type " " pulled-schemas))
+      (assert (= (count pulled-schemas) 1) (str "There is more than one schema of type " schema-type "\n"
+                                                (with-out-str (clojure.pprint/pprint pulled-schemas))))
       (first pulled-schemas))
     (pull-schema-by-type db schema-type entity-type)))
+
+
+
+;(defn derive-schema [db {{schema-type :db/ident} :field/entity-schema-type} {sub-type :entity.schema/sub-type}]
+;  "Derive the schema from the entity"
+;  (assert (not (nil? db)))
+;  (assert (not (nil? schema-type)))
+;  (if (nil? sub-type)
+;    (let [pulled-schemas (pull-schema-by-type db schema-type)]
+;      (assert (= (count pulled-schemas) 1) (str "There is more than one schema of type " schema-type " " pulled-schemas))
+;      (first pulled-schemas))
+;    (pull-schema-by-type db schema-type sub-type)))
 
 
 

@@ -142,9 +142,6 @@
     @(d/transact conn entity-schema-txs)
     (d/db conn)))
 
-;TODO create one schema with all of this behaviour
-;TODO do we really want to have entity.schema.type and not just entity/type, and then something more specific
-; TODO in th tnity itslef??
 
 (deftest get-ref-val-test
   (testing "Simple Validation Test"
@@ -331,7 +328,7 @@
 
                             :entity.schema/type        {:db/id    (d/tempid :db.part/user -1)
                                                         :db/ident :entity.schema.type/test-type}
-                            :entity.schema/entity-type {:db/id    (d/tempid :db.part/user)
+                            :entity.schema/sub-type {:db/id    (d/tempid :db.part/user)
                                                         :db/ident :entity.type/test-type}
                             :entity.schema/fields      [{:db/id           (d/tempid :db.part/user)
                                                          :field/schema    :test-entity/string-field
@@ -342,7 +339,7 @@
                             :entity.schema/type        {:db/id    (d/tempid :db.part/user -1)
                                                         :db/ident :entity.schema.type/test-type}
 
-                            :entity.schema/entity-type {:db/id    (d/tempid :db.part/user)
+                            :entity.schema/sub-type {:db/id    (d/tempid :db.part/user)
                                                         :db/ident :entity.type/test-type2}
 
                             :entity.schema/fields      [{:db/id           (d/tempid :db.part/user)
@@ -353,7 +350,7 @@
                                                          :field/nullable? false}]}])
                (v/validate
                  :entity.schema.type/test-type
-                 {:entity/type              :entity.type/test-type
+                 {:entity.schema/sub-type              :entity.type/test-type
                   :test-entity/string-field "Bob"})))))
 
   (testing "Test Error on not suppying enough info to resolve schema"
@@ -364,7 +361,7 @@
 
                                               :entity.schema/type        {:db/id    (d/tempid :db.part/user -1)
                                                                           :db/ident :entity.schema.type/test-type}
-                                              :entity.schema/entity-type {:db/id    (d/tempid :db.part/user)
+                                              :entity.schema/sub-type {:db/id    (d/tempid :db.part/user)
                                                                           :db/ident :entity.type/test-type}
                                               :entity.schema/fields      [{:db/id           (d/tempid :db.part/user)
                                                                            :field/schema    :test-entity/string-field
@@ -375,7 +372,7 @@
                                               :entity.schema/type        {:db/id    (d/tempid :db.part/user -1)
                                                                           :db/ident :entity.schema.type/test-type}
 
-                                              :entity.schema/entity-type {:db/id    (d/tempid :db.part/user)
+                                              :entity.schema/sub-type {:db/id    (d/tempid :db.part/user)
                                                                           :db/ident :entity.type/test-type2}
 
                                               :entity.schema/fields      [{:db/id           (d/tempid :db.part/user)

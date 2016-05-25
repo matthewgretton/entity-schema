@@ -2,7 +2,9 @@
   (:require [entity-schema.yaml-conversion :as fy]
             [datomic.api :as d]
             [entity-schema.datomic-helper :as dh]
-            [entity-schema.entity-schema :as es]))
+            [entity-schema.entity-schema :as es]
+            [entity-schema.validation :as v])
+  (:import (java.util UUID Date)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; This example creates some schema from yaml files
@@ -100,11 +102,10 @@
 (es/pull-schema-by-type (d/db conn) :entity.schema.type/funding-channel)
 
 
-(es/derive-schema (d/db conn) :entity.schema.type/funding-channel nil )
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Demonstrate validation
+;; Nested validation example
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Ok so we created 3 entity-schema from the YAML files, and  added join fields between them. Let's create an
@@ -114,90 +115,141 @@
 
 ;; An example of a funding channel entity with eligibility criterions and concentration limits
 (def full-fc-entity
-  {:entity/schema                                :entity.schema/funding-channel
-   :entity/instant                               (Date.)
+  {:entity/instant                               (Date.)
    :funding-channel/funding-channel-uuid         (UUID/randomUUID)
    :funding-channel/name                         "Dorset Rise Ltd"
    :funding-channel/referral-only?               false
    :funding-channel/scale-allocation-percentage? true
    :funding-channel/allocation-percentage        (bigdec 0.7)
-   :funding-channel/eligibility-criterions       #{{:entity/instant                            (Date.)
-                                                    :entity/schema                             :entity.schema/eligibility-criterion
-                                                    :eligibility-criterion/criterion-type      "Include"
+   :funding-channel/eligibility-criterions       #{{:eligibility-criterion/criterion-type      "Include"
                                                     :eligibility-criterion/criterion-attribute ":risk-band"
                                                     :eligibility-criterion/criterion-value     "#{:Aplus :A :B :C :D}"}
-                                                   {:entity/instant                            (Date.)
-                                                    :entity/schema                             :entity.schema/eligibility-criterion
-                                                    :eligibility-criterion/criterion-type      "Include"
+
+                                                   {:eligibility-criterion/criterion-type      "Include"
                                                     :eligibility-criterion/criterion-attribute ":secured"
                                                     :eligibility-criterion/criterion-value     "#{false}"}}
 
-   :funding-channel/concentration-limits         #{{:entity/instant                            (Date.)
-                                                    :entity/schema                             :entity.schema/concentration-limit
-                                                    :concentration-limit/threshold             (float 0.7)
+   :funding-channel/concentration-limits         #{{:concentration-limit/threshold             (float 0.7)
                                                     :concentration-limit/constraint-type       "MaxAllocationLifetime"
                                                     :concentration-limit/constrained-attribute ":original-principal-cents"
                                                     :concentration-limit/constrained-value     "1000"}
 
-                                                   {:entity/instant                            (Date.)
-                                                    :entity/schema                             :entity.schema/concentration-limit
-                                                    :concentration-limit/threshold             (float 0.7)
+                                                   {:concentration-limit/threshold             (float 0.7)
                                                     :concentration-limit/constraint-type       "MaxAllocationMonthly"
                                                     :concentration-limit/constrained-attribute ":original-principal-cents"
                                                     :concentration-limit/constrained-value     "100"}}})
 
 
 
-(def valid-result (v/validate (d/db conn) :entity.schema.type/funding-channel full-fc-entity))
-
-(v/valid? valid-result)
-
-;;remove a required field from the entity
-(def invalid-result
-  (v/validate (d/db conn) :entity.schema.type/funding-channel
-              (dissoc full-fc-entity :funding-channel/referral-only?)))
-
-(v/valid? invalid-result)
+(v/validate (d/db conn) :entity.schema.type/funding-channel full-fc-entity)
 
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Types example
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+;; The reason the  concentration limits (and elibility-criterion) are modelled in this general way, is that there are
+;; in fact many types of concentratoin limit. The two examples in the entity above clearly demonstrate this. Ideally,
+;; we would want to model these as different entity types. We can do this as follows:
 
-(def ref-field-txs
+;; create new fields and new schema:
+
+;
+(def risk-band-enum-values
+  [{:db/id (d/tempid :db.part/user)
+    :db/ident :risk-band/Aplus}
+   {:db/id (d/tempid :db.part/user)
+    :db/ident :risk-band/A}
+   {:db/id (d/tempid :db.part/user)
+    :db/ident :risk-band/B}
+   {:db/id (d/tempid :db.part/user)
+    :db/ident :risk-band/C}
+   {:db/id (d/tempid :db.part/user)
+    :db/ident :risk-band/D}
+   ])
+
+(def eligibility-criterion-fields
   [;; create a join field from function channel to elibility criteria, not it's a cardinality many field
+
    {:db/id                 (d/tempid :db.part/db)           ;; this creates a temporary id in the db partition
     :db.install/_attribute :db.part/db
-    :db/ident              :concentration-limit/risk-bands
+    :db/ident              :eligibility-criterion/risk-bands
     :db/valueType          :db.type/ref
     :db/cardinality        :db.cardinality/many}
 
    {:db/id                 (d/tempid :db.part/db)
     :db.install/_attribute :db.part/db
-    :db/ident              :concentration-limit/secured?
-    :db/valueType          :db.type/ref
-    :db/cardinality        :db.cardinality/true}
-
-
-   {:db/id                 (d/tempid :db.part/db)
-    :db.install/_attribute :db.part/db
     :db/ident              :eligibility-criterion/secured?
-    :db/valueType          :db.type/ref
-    :db/cardinality        :db.cardinality/true}
+    :db/valueType          :db.type/boolean
+    :db/cardinality        :db.cardinality/one}])
 
-   {:db/id                 (d/tempid :db.part/db)
-    :db.install/_attribute :db.part/db
-    :db/ident              :eligibility-criterion/original-principal-cents
-    :db/valueType          :db.type/long
-    :db/cardinality        :db.cardinality/true}])
+@(d/transact conn (concat eligibility-criterion-fields
+                          risk-band-enum-values))
 
-(def include-risk-schema
-  [{:db/id                (d/tempid :db.part/user)
-    :db/ident             :entity.schema/concetration-limit-include-risk
-    :entity.schema/fields #{{:db/id        (d/tempid :db.part/user)
-                             :field/schema :concentration-limit/risk-bands}}}
+(def include-eligiblity-schema
+  [
+   {:db/id    (d/tempid :db.part/user -1)
+    :db/ident :entity.schema.type/risk-band}
 
    {:db/id                (d/tempid :db.part/user)
-    :db/ident             :entity.schema/concetration-limit-secured
-    :entity.schema/fields #{{:db/id        (d/tempid :db.part/user)
-                             :field/schema :concentration-limit/secured?}}}])
+    :db/ident             :entity.schema/risk-band
+    :entity.schema/type   (d/tempid :db.part/user -1)
+    :entity.schema/fields #{{:db/id           (d/tempid :db.part/user)
+                             :field/schema    :db/ident
+                             :field/nullable? false}}}
+
+   {:db/id                  (d/tempid :db.part/user)
+    :db/ident               :entity.schema/eligibility-criterion-include-risk
+    :entity.schema/type     :entity.schema.type/eligibility-criterion
+    :entity.schema/sub-type {:db/id    (d/tempid :db.part/user)
+                             :db/ident :entity.schema.sub-type/risk-bands}
+    :entity.schema/fields   #{{:db/id           (d/tempid :db.part/user)
+                               :field/schema    :eligibility-criterion/risk-bands
+                               :field/entity-schema-type (d/tempid :db.part/user -1)
+                               :field/nullable? false}}}
+
+   {:db/id                  (d/tempid :db.part/user)
+    :db/ident               :entity.schema/eligibility-criterion-secured?
+    :entity.schema/type     :entity.schema.type/eligibility-criterion
+    :entity.schema/sub-type {:db/id    (d/tempid :db.part/user)
+                             :db/ident :entity.schema.sub-type/secured?}
+    :entity.schema/fields   #{{:db/id           (d/tempid :db.part/user)
+                               :field/schema    :eligibility-criterion/secured?
+                               :field/nullable? false}}}])
+
+@(d/transact conn include-eligiblity-schema)
+
+;;TODO add something into the validator such that it checks to see whether the type is a keyword.
+(def modified-full-fc-entity
+  {:entity/instant                               (Date.)
+   :funding-channel/funding-channel-uuid         (UUID/randomUUID)
+   :funding-channel/name                         "Dorset Rise Ltd"
+   :funding-channel/referral-only?               false
+   :funding-channel/scale-allocation-percentage? true
+   :funding-channel/allocation-percentage        (bigdec 0.7)
+   :funding-channel/eligibility-criterions       #{{:entity.schema/sub-type         :entity.schema.sub-type/risk-bands
+
+                                                    :eligibility-criterion/risk-bands #{:ranking-band/Aplus
+                                                                                        :ranking-band/A
+                                                                                        :ranking-band/B
+                                                                                        :ranking-band/C
+                                                                                        :ranking-band/D}}
+                                                   {:entity.schema/sub-type         :entity.schema.sub-type/secured?
+                                                    :eligibility-criterion/secured? false}}
+
+   :funding-channel/concentration-limits         #{{:concentration-limit/threshold             (float 0.7)
+                                                    :concentration-limit/constraint-type       "MaxAllocationLifetime"
+                                                    :concentration-limit/constrained-attribute ":original-principal-cents"
+                                                    :concentration-limit/constrained-value     "1000"}
+
+                                                   {:concentration-limit/threshold             (float 0.7)
+                                                    :concentration-limit/constraint-type       "MaxAllocationMonthly"
+                                                    :concentration-limit/constrained-attribute ":original-principal-cents"
+                                                    :concentration-limit/constrained-value     "100"}}})
+
+;; TODO we also want the possiblity of changing those types as a keyword
+(->> (v/validate (d/db conn) :entity.schema.type/funding-channel modified-full-fc-entity)
+     (v/valid?))
+

@@ -1,6 +1,5 @@
 (ns entity-schema.validation
-  (:require [entity-schema.entity-schema :as es]
-            [datomic.api :as d])
+  (:require [entity-schema.entity-schema :as es])
   (:import (java.net URI)
            (java.util UUID Date Map)
            (clojure.lang Keyword)))
@@ -20,7 +19,10 @@
    :db.type/uuid    UUID
    :db.type/uri     URI
    :db.type/bytes   (Class/forName "[B")
-   :db.type/ref     Map})
+   :db.type/ref     #{Keyword Map}})
+
+(def java-datomic-type-map
+  (clojure.set/map-invert datomic-java-type-map))
 
 (declare validate-entity)
 
@@ -35,7 +37,7 @@
          "Incorrect Value Type"
          {:value         value
           :expected-type expected-type
-          :actual-type   (class value)}))
+          :actual-type   (get java-datomic-type-map (class value))}))
 
 (defn unrecognised-type-error [type type-map]
   (error :error.type/unrecognised-type
@@ -52,10 +54,13 @@
 (defn error? [v]
   (and (map? v) (contains? v :error/type)))
 
+(defn to-coll [x]
+  (if (coll? x) x #{x}))
+
 (defn validate-type
   ([type value]
-   (if-let [java-type (get datomic-java-type-map type)]
-     (if (instance? java-type value)
+   (if-let [java-types (to-coll (get datomic-java-type-map type))]
+     (if (some #(instance? % value) java-types)
        value
        (incorrect-type-error value type))
      (unrecognised-type-error type datomic-java-type-map))))
@@ -63,14 +68,13 @@
 (defn validate-value [db field val]
   (let [valueType (get-in field [:field/schema :db/valueType :db/ident])
         schema-type (get-in field [:field/entity-schema-type :db/ident])
-        {:keys [:entity/type] :as type-checked-val} (validate-type valueType val)]
+        {:keys [:entity.schema/sub-type] :as type-checked-val} (validate-type valueType val)]
     (if (or (error? type-checked-val) (not= valueType :db.type/ref))
       type-checked-val
-      (->> (es/derive-schema db schema-type type)
+      (->> (es/derive-schema db schema-type sub-type)
            (validate-entity db type-checked-val)))))
 
-(defn to-coll [x]
-  (if (coll? x) x #{x}))
+
 
 (defn validate-field [db entity-schema field entity]
   (let [{nullable?                                 :field/nullable?
@@ -100,16 +104,19 @@
 
 (defn validate
   "returns a structurally similar version of the entity with error information"
-  ([db schema-type {:keys [:entity/type] :as entity}]
-   (->> (es/derive-schema db schema-type type)
+  ([db schema-type {:keys [:entity.schema/sub-type] :as entity}]
+   (->> (es/derive-schema db schema-type sub-type)
         (validate-entity db entity))))
 
 
 (defn valid?
   "is the validation result valid?"
   [result]
-  (cond (map? result) (and (not (error? result)) (valid? (into [] (filter map? (vals result)))))
-        (coll? result) (every? valid? result)))
+  (cond (map? result) (and (not (error? result)) (valid? (into [] (vals result))))
+        (coll? result) (every? valid? result)
+        :else true))
+
+
 
 (defn assert-valid
   ([db schema-type entity]
