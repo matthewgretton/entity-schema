@@ -27,7 +27,10 @@
     #{item}))
 
 (defn create-db-ident [entity-name field-name]
-  (keyword (prettify-name entity-name) (prettify-name field-name)))
+  (let [ns (prettify-name entity-name)
+        name (prettify-name field-name)]
+    (keyword ns
+             (clojure.string/replace name (str ns "-") ""))))
 
 (defn create-datomic-field [entity-name
                             indexes
@@ -52,7 +55,7 @@
         (assoc datomic-field :db/index true))
       datomic-field)))
 
-(defn yaml->field-txs [{:keys [:name :columns :natural_key :indexes]}]
+(defn yaml->field-txs [{:keys [:name :columns :natural_key :indexes] :as yaml}]
   (->> columns
        (filter #(not= (:name %) "id"))                      ;id field will be created automatically
        (map #(create-datomic-field name indexes natural_key %))

@@ -116,7 +116,7 @@
 ;; An example of a funding channel entity with eligibility criterions and concentration limits
 (def full-fc-entity
   {:entity/instant                               (Date.)
-   :funding-channel/funding-channel-uuid         (UUID/randomUUID)
+   :funding-channel/uuid                         (UUID/randomUUID)
    :funding-channel/name                         "Dorset Rise Ltd"
    :funding-channel/referral-only?               false
    :funding-channel/scale-allocation-percentage? true
@@ -158,15 +158,15 @@
 
 ;
 (def risk-band-enum-values
-  [{:db/id (d/tempid :db.part/user)
+  [{:db/id    (d/tempid :db.part/user)
     :db/ident :risk-band/Aplus}
-   {:db/id (d/tempid :db.part/user)
+   {:db/id    (d/tempid :db.part/user)
     :db/ident :risk-band/A}
-   {:db/id (d/tempid :db.part/user)
+   {:db/id    (d/tempid :db.part/user)
     :db/ident :risk-band/B}
-   {:db/id (d/tempid :db.part/user)
+   {:db/id    (d/tempid :db.part/user)
     :db/ident :risk-band/C}
-   {:db/id (d/tempid :db.part/user)
+   {:db/id    (d/tempid :db.part/user)
     :db/ident :risk-band/D}
    ])
 
@@ -205,10 +205,10 @@
     :entity.schema/type     :entity.schema.type/eligibility-criterion
     :entity.schema/sub-type {:db/id    (d/tempid :db.part/user)
                              :db/ident :entity.schema.sub-type/risk-bands}
-    :entity.schema/fields   #{{:db/id           (d/tempid :db.part/user)
-                               :field/schema    :eligibility-criterion/risk-bands
+    :entity.schema/fields   #{{:db/id                    (d/tempid :db.part/user)
+                               :field/schema             :eligibility-criterion/risk-bands
                                :field/entity-schema-type (d/tempid :db.part/user -1)
-                               :field/nullable? false}}}
+                               :field/nullable?          false}}}
 
    {:db/id                  (d/tempid :db.part/user)
     :db/ident               :entity.schema/eligibility-criterion-secured?
@@ -229,7 +229,7 @@
    :funding-channel/referral-only?               false
    :funding-channel/scale-allocation-percentage? true
    :funding-channel/allocation-percentage        (bigdec 0.7)
-   :funding-channel/eligibility-criterions       #{{:entity.schema/sub-type         :entity.schema.sub-type/risk-bands
+   :funding-channel/eligibility-criterions       #{{:entity.schema/sub-type           :entity.schema.sub-type/risk-bands
 
                                                     :eligibility-criterion/risk-bands #{:ranking-band/Aplus
                                                                                         :ranking-band/A

@@ -11,8 +11,7 @@
 ; This example demonstrates the following
 ;
 ; - Validation of an entity
-; - Evolving the schema over time
-; - Evolving code and schema
+; - Evolving the schema over time in step with code
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
@@ -41,6 +40,7 @@
 ;; note that datomc fields must have been transacted before they are referrd to.
 ;; Hence, fields transacted before entity schema
 @(d/transact conn [fc-schema-tx])
+
 
 ;;Let's look up the schema we have created. First we use the :db/ident attribte of fc-schema-tx to look it up a
 ;; :db/ident way of unique identifying entities in datomic

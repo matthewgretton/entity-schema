@@ -1,9 +1,9 @@
 (ns entity-schema.validation
-  (:require [entity-schema.entity-schema :as es])
+  (:require [entity-schema.entity-schema :as es]
+            [datomic.api :as d])
   (:import (java.net URI)
-           (java.util UUID Date Map)
+           (java.util UUID Date)
            (clojure.lang Keyword)))
-
 
 (def datomic-java-type-map
   {
@@ -18,8 +18,7 @@
    :db.type/instant Date
    :db.type/uuid    UUID
    :db.type/uri     URI
-   :db.type/bytes   (Class/forName "[B")
-   :db.type/ref     #{Keyword Map}})
+   :db.type/bytes   (Class/forName "[B")})
 
 (def java-datomic-type-map
   (clojure.set/map-invert datomic-java-type-map))
@@ -57,24 +56,27 @@
 (defn to-coll [x]
   (if (coll? x) x #{x}))
 
+;;TODO - do a check for whether the keyword actually exists
 (defn validate-type
-  ([type value]
-   (if-let [java-types (to-coll (get datomic-java-type-map type))]
-     (if (some #(instance? % value) java-types)
-       value
-       (incorrect-type-error value type))
-     (unrecognised-type-error type datomic-java-type-map))))
+  ([db type value]
+   (if (= type :db.type/ref)
+     (or (map? value)
+         (and (keyword? value)
+              (not (nil? (d/pull db '[:db/ident] value)))))
+     (if-let [java-type (get datomic-java-type-map type)]
+       (if (instance? java-type value)
+         value
+         (incorrect-type-error value type))
+       (unrecognised-type-error type datomic-java-type-map)))))
 
 (defn validate-value [db field val]
   (let [valueType (get-in field [:field/schema :db/valueType :db/ident])
         schema-type (get-in field [:field/entity-schema-type :db/ident])
-        {:keys [:entity.schema/sub-type] :as type-checked-val} (validate-type valueType val)]
+        {:keys [:entity.schema/sub-type] :as type-checked-val} (validate-type db valueType val)]
     (if (or (error? type-checked-val) (not= valueType :db.type/ref))
       type-checked-val
       (->> (es/derive-schema db schema-type sub-type)
            (validate-entity db type-checked-val)))))
-
-
 
 (defn validate-field [db entity-schema field entity]
   (let [{nullable?                                 :field/nullable?
@@ -96,9 +98,10 @@
   [db
    entity
    {:keys [:entity.schema/fields] :as schema}]
+  (clojure.pprint/pprint entity)
+  (clojure.pprint/pprint schema)
   (->> fields
-       (map (fn [field-schema]
-              (validate-field db schema field-schema entity)))
+       (map #(validate-field db schema % entity))
        (filter (comp not nil? second))
        (into {})))
 
@@ -108,15 +111,12 @@
    (->> (es/derive-schema db schema-type sub-type)
         (validate-entity db entity))))
 
-
 (defn valid?
   "is the validation result valid?"
   [result]
   (cond (map? result) (and (not (error? result)) (valid? (into [] (vals result))))
         (coll? result) (every? valid? result)
         :else true))
-
-
 
 (defn assert-valid
   ([db schema-type entity]
