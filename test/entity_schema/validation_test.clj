@@ -187,10 +187,11 @@
 
 
   (testing "Error Test"
-    (is (= {:test-entity/ref-field {:error/data    {:actual-type   :db.type/string
-                                                    :expected-type :db.type/ref
-                                                    :value         "Bob"}
-                                    :error/message "Incorrect Value Type"
+    (is (= {:test-entity/ref-field {:error/data    {:actual-type         java.lang.String
+                                                    :expected-java-types #{clojure.lang.Keyword
+                                                                           java.util.Map}
+                                                    :value               "Bob"}
+                                    :error/message "Ref type is incorrect"
                                     :error/type    :error.type/incorrect-type}}
 
            (-> (create-db [{:db/id                (d/tempid :db.part/user)

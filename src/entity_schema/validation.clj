@@ -2,7 +2,7 @@
   (:require [entity-schema.entity-schema :as es]
             [datomic.api :as d])
   (:import (java.net URI)
-           (java.util UUID Date)
+           (java.util UUID Date Map)
            (clojure.lang Keyword)))
 
 (def datomic-java-type-map
@@ -53,21 +53,37 @@
 (defn error? [v]
   (and (map? v) (contains? v :error/type)))
 
+
+
 (defn to-coll [x]
   (if (coll? x) x #{x}))
+
+(defn validate-ref-type [db value]
+  (cond (map? value) value
+        (keyword? value) (if-let [pulled-val (d/pull db '[:db/ident] value)]
+                           pulled-val
+                           (error :error.type/incorrect-type "db/ident does not exist in the db"
+                                  {:value               value}))
+        :else (error :error.type/incorrect-type "Ref type is incorrect" {:value               value
+                                                                         :expected-java-types #{Map Keyword}
+                                                                         :actual-type         (type value)}))
+  )
+
+(defn validate-non-ref-type [value type]
+  (if-let [java-type (get datomic-java-type-map type)]
+    (if (instance? java-type value)
+      value
+      (incorrect-type-error value type))
+    (unrecognised-type-error type datomic-java-type-map)))
+
+
 
 ;;TODO - do a check for whether the keyword actually exists
 (defn validate-type
   ([db type value]
    (if (= type :db.type/ref)
-     (or (map? value)
-         (and (keyword? value)
-              (not (nil? (d/pull db '[:db/ident] value)))))
-     (if-let [java-type (get datomic-java-type-map type)]
-       (if (instance? java-type value)
-         value
-         (incorrect-type-error value type))
-       (unrecognised-type-error type datomic-java-type-map)))))
+     (validate-ref-type db value)
+     (validate-non-ref-type value type))))
 
 (defn validate-value [db field val]
   (let [valueType (get-in field [:field/schema :db/valueType :db/ident])
@@ -98,8 +114,6 @@
   [db
    entity
    {:keys [:entity.schema/fields] :as schema}]
-  (clojure.pprint/pprint entity)
-  (clojure.pprint/pprint schema)
   (->> fields
        (map #(validate-field db schema % entity))
        (filter (comp not nil? second))

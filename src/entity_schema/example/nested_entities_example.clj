@@ -231,11 +231,11 @@
    :funding-channel/allocation-percentage        (bigdec 0.7)
    :funding-channel/eligibility-criterions       #{{:entity.schema/sub-type           :entity.schema.sub-type/risk-bands
 
-                                                    :eligibility-criterion/risk-bands #{:ranking-band/Aplus
-                                                                                        :ranking-band/A
-                                                                                        :ranking-band/B
-                                                                                        :ranking-band/C
-                                                                                        :ranking-band/D}}
+                                                    :eligibility-criterion/risk-bands #{:risk-band/Aplus
+                                                                                        :risk-band/A
+                                                                                        :risk-band/B
+                                                                                        :risk-band/C
+                                                                                        :risk-band/D}}
                                                    {:entity.schema/sub-type         :entity.schema.sub-type/secured?
                                                     :eligibility-criterion/secured? false}}
 
@@ -252,4 +252,3 @@
 ;; TODO we also want the possiblity of changing those types as a keyword
 (->> (v/validate (d/db conn) :entity.schema.type/funding-channel modified-full-fc-entity)
      (v/valid?))
-
