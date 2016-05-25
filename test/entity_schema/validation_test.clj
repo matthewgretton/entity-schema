@@ -52,7 +52,7 @@
 
   (testing "Test wrong type validation"
     (is (= [:test-entity/double-field
-            {:error/data    {:actual-type   java.lang.String
+            {:error/data    {:actual-type   :db.type/string
                              :expected-type :db.type/double
                              :value         "bob"}
              :error/message "Incorrect Value Type"
@@ -187,7 +187,7 @@
 
 
   (testing "Error Test"
-    (is (= {:test-entity/ref-field {:error/data    {:actual-type   java.lang.String
+    (is (= {:test-entity/ref-field {:error/data    {:actual-type   :db.type/string
                                                     :expected-type :db.type/ref
                                                     :value         "Bob"}
                                     :error/message "Incorrect Value Type"
@@ -213,7 +213,7 @@
                   :test-entity/ref-field "Bob"})))))
 
   (testing "Nested Error Test"
-    (is (= {:test-entity/ref-field {:test-entity/string-field {:error/data    {:actual-type   java.lang.Double
+    (is (= {:test-entity/ref-field {:test-entity/string-field {:error/data    {:actual-type   :db.type/double
                                                                                :expected-type :db.type/string
                                                                                :value         10.0}
                                                                :error/message "Incorrect Value Type"
@@ -280,7 +280,7 @@
 
   (testing "Test Cardinality Many With Error"
     (is (= {:test-entity/ref-many-field #{{:test-entity/string-field "Bob"}
-                                          {:test-entity/string-field {:error/data    {:actual-type   java.lang.Double
+                                          {:test-entity/string-field {:error/data    {:actual-type   :db.type/double
                                                                                       :expected-type :db.type/string
                                                                                       :value         10.0}
                                                                       :error/message "Incorrect Value Type"
