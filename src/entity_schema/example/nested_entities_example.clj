@@ -10,6 +10,8 @@
 ;; This example creates some schema from yaml files
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;;TODO Put some time stamps in so different lines can be re-run out of order
+
 ;; set up Datomic database and get a database connection
 (def uri (dh/create-in-mem-db-uri "fc-entity-db"))
 
@@ -48,11 +50,14 @@
 (def e-schema-tx (fy/yaml->entity-schema-tx e-data))
 @(d/transact conn [e-schema-tx])
 
+;; immutable database snapshot
+(def first-draft-schema-db (d/db conn))
+
 
 ;; Let's take a look at the schema we've created. We pull all schema by there type
 ;; (d/db conn) gives an immutable shapshot of the database at the moment it is called
-(es/pull-schema-by-type (d/db conn) :entity.schema.type/funding-channel)
-(es/pull-schema-by-type (d/db conn) :entity.schema.type/eligibility-criterion)
+(es/pull-schema-by-type first-draft-schema-db :entity.schema.type/funding-channel)
+(es/pull-schema-by-type first-draft-schema-db :entity.schema.type/eligibility-criterion)
 
 
 ;; Great, so we've created 3 schema, but there is nothing linking those things together in the YAML
@@ -81,8 +86,11 @@
 
 @(d/transact conn [add-ref-fields-to-funding-channel-schema-tx])
 
+
+(def schema-with-joins (d/db conn))
+
 ;;Let's take a looka the full entity-schema for the funding cicle with joins
-(es/pull-schema-by-type (d/db conn) :entity.schema.type/funding-channel)
+(es/pull-schema-by-type schema-with-joins :entity.schema.type/funding-channel)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -112,7 +120,7 @@
 
 
 
-(v/validate (d/db conn) :entity.schema.type/funding-channel full-fc-entity)
+(v/validate schema-with-joins :entity.schema.type/funding-channel full-fc-entity)
 
 
 
@@ -192,9 +200,12 @@
 
 @(d/transact conn include-eligiblity-schema)
 
+
+(def modified-eligibility-db (d/db conn))
+
 (def modified-full-fc-entity
   {:entity/instant                               (Date.)
-   :funding-channel/funding-channel-uuid         (UUID/randomUUID)
+   :funding-channel/uuid                         (UUID/randomUUID)
    :funding-channel/name                         "Dorset Rise Ltd"
    :funding-channel/referral-only?               false
    :funding-channel/scale-allocation-percentage? true
@@ -209,5 +220,5 @@
                                                    {:entity.schema/sub-type         :entity.schema.sub-type/secured?
                                                     :eligibility-criterion/secured? false}}})
 
-(->> (v/validate (d/db conn) :entity.schema.type/funding-channel modified-full-fc-entity)
+(->> (v/validate modified-eligibility-db :entity.schema.type/funding-channel modified-full-fc-entity)
      (v/valid?))
