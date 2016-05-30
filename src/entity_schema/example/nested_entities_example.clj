@@ -40,12 +40,6 @@
 
 
 
-;;concentration limit
-(def cl-data (fy/read-yaml-from-class-path "dimensions/concentration_limit_dim.yml"))
-(def cl-field-txs (fy/yaml->field-txs cl-data))
-@(d/transact conn cl-field-txs)
-(def cl-schema-tx (fy/yaml->entity-schema-tx cl-data))
-@(d/transact conn [cl-schema-tx])
 
 ;;eligibility criteria
 (def e-data (fy/read-yaml-from-class-path "dimensions/eligibility_criteria_dim.yml"))
@@ -58,7 +52,6 @@
 ;; Let's take a look at the schema we've created. We pull all schema by there type
 ;; (d/db conn) gives an immutable shapshot of the database at the moment it is called
 (es/pull-schema-by-type (d/db conn) :entity.schema.type/funding-channel)
-(es/pull-schema-by-type (d/db conn) :entity.schema.type/concentration-limit)
 (es/pull-schema-by-type (d/db conn) :entity.schema.type/eligibility-criterion)
 
 
@@ -73,12 +66,6 @@
     :db/ident              :funding-channel/eligibility-criterions
     :db/valueType          :db.type/ref
     :db/cardinality        :db.cardinality/many}            ;; one to many join
-
-   {:db/id                 (d/tempid :db.part/db)
-    :db.install/_attribute :db.part/db
-    :db/ident              :funding-channel/concentration-limits
-    :db/valueType          :db.type/ref
-    :db/cardinality        :db.cardinality/many}            ;; one to many join
    ])
 
 @(d/transact conn join-field-txs)
@@ -88,10 +75,6 @@
   {:db/id :entity.schema/funding-channel                    ;; we created the schema with a db/ident field so they can easily referened
    :entity.schema/fields
           [{:db/id                    (d/tempid :db.part/user)
-            :field/schema             :funding-channel/concentration-limits
-            :field/entity-schema-type :entity.schema.type/concentration-limit
-            :field/nullable?          false}
-           {:db/id                    (d/tempid :db.part/user)
             :field/schema             :funding-channel/eligibility-criterions
             :field/entity-schema-type :entity.schema.type/eligibility-criterion
             :field/nullable?          false}]})
@@ -100,8 +83,6 @@
 
 ;;Let's take a looka the full entity-schema for the funding cicle with joins
 (es/pull-schema-by-type (d/db conn) :entity.schema.type/funding-channel)
-
-
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -127,17 +108,7 @@
 
                                                    {:eligibility-criterion/criterion-type      "Include"
                                                     :eligibility-criterion/criterion-attribute ":secured"
-                                                    :eligibility-criterion/criterion-value     "#{false}"}}
-
-   :funding-channel/concentration-limits         #{{:concentration-limit/threshold             (float 0.7)
-                                                    :concentration-limit/constraint-type       "MaxAllocationLifetime"
-                                                    :concentration-limit/constrained-attribute ":original-principal-cents"
-                                                    :concentration-limit/constrained-value     "1000"}
-
-                                                   {:concentration-limit/threshold             (float 0.7)
-                                                    :concentration-limit/constraint-type       "MaxAllocationMonthly"
-                                                    :concentration-limit/constrained-attribute ":original-principal-cents"
-                                                    :concentration-limit/constrained-value     "100"}}})
+                                                    :eligibility-criterion/criterion-value     "#{false}"}}})
 
 
 
@@ -191,7 +162,7 @@
 (def include-eligiblity-schema
   [
    {:db/id    (d/tempid :db.part/user -1)
-    :db/ident :entity.schema.type/risk-band}
+    :db/ident :entity.schema.type/risk-band}                ;;risk band entity type
 
    {:db/id                (d/tempid :db.part/user)
     :db/ident             :entity.schema/risk-band
@@ -221,7 +192,6 @@
 
 @(d/transact conn include-eligiblity-schema)
 
-;;TODO add something into the validator such that it checks to see whether the type is a keyword.
 (def modified-full-fc-entity
   {:entity/instant                               (Date.)
    :funding-channel/funding-channel-uuid         (UUID/randomUUID)
@@ -237,18 +207,7 @@
                                                                                         :risk-band/C
                                                                                         :risk-band/D}}
                                                    {:entity.schema/sub-type         :entity.schema.sub-type/secured?
-                                                    :eligibility-criterion/secured? false}}
+                                                    :eligibility-criterion/secured? false}}})
 
-   :funding-channel/concentration-limits         #{{:concentration-limit/threshold             (float 0.7)
-                                                    :concentration-limit/constraint-type       "MaxAllocationLifetime"
-                                                    :concentration-limit/constrained-attribute ":original-principal-cents"
-                                                    :concentration-limit/constrained-value     "1000"}
-
-                                                   {:concentration-limit/threshold             (float 0.7)
-                                                    :concentration-limit/constraint-type       "MaxAllocationMonthly"
-                                                    :concentration-limit/constrained-attribute ":original-principal-cents"
-                                                    :concentration-limit/constrained-value     "100"}}})
-
-;; TODO we also want the possiblity of changing those types as a keyword
 (->> (v/validate (d/db conn) :entity.schema.type/funding-channel modified-full-fc-entity)
      (v/valid?))

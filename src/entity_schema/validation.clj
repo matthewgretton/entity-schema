@@ -5,7 +5,10 @@
            (java.util UUID Date Map)
            (clojure.lang Keyword)))
 
-(def datomic-java-type-map
+(defn to-coll [x]
+  (if (coll? x) x #{x}))
+
+(def valid-types
   {
    :db.type/keyword Keyword
    :db.type/string  String
@@ -18,10 +21,8 @@
    :db.type/instant Date
    :db.type/uuid    UUID
    :db.type/uri     URI
-   :db.type/bytes   (Class/forName "[B")})
-
-(def java-datomic-type-map
-  (clojure.set/map-invert datomic-java-type-map))
+   :db.type/bytes   (Class/forName "[B")
+   :db.type/ref     #{Map Keyword}})
 
 (declare validate-entity)
 
@@ -31,18 +32,25 @@
    :error/data    data})
 
 ;Error functions
-(defn incorrect-type-error [value expected-type]
+(defn incorrect-type-error [value datomic-type valid-types]
   (error :error.type/incorrect-type
          "Incorrect Value Type"
-         {:value         value
-          :expected-type expected-type
-          :actual-type   (get java-datomic-type-map (class value))}))
+         {:value        value
+          :datomic-type datomic-type
+          :value-type   (class value)
+          :valid-types  valid-types}))
 
 (defn unrecognised-type-error [type type-map]
   (error :error.type/unrecognised-type
          "Type not supported"
          {:type            type
           :recognised-keys type-map}))
+
+
+(defn incorrect-ident-error [ident]
+  (error :error.type/incorrect-type
+         ":db/ident keyword does not refer to a transacted entity"
+         {:db/ident            ident}))
 
 (defn not-nullable-error [type-ident field]
   (error :error.type/required-field
@@ -53,46 +61,25 @@
 (defn error? [v]
   (and (map? v) (contains? v :error/type)))
 
-
-
-(defn to-coll [x]
-  (if (coll? x) x #{x}))
-
-(defn validate-ref-type [db value]
-  (cond (map? value) value
-        (keyword? value) (if-let [pulled-val (d/pull db '[:db/ident] value)]
-                           pulled-val
-                           (error :error.type/incorrect-type "db/ident does not exist in the db"
-                                  {:value               value}))
-        :else (error :error.type/incorrect-type "Ref type is incorrect" {:value               value
-                                                                         :expected-java-types #{Map Keyword}
-                                                                         :actual-type         (type value)}))
-  )
-
-(defn validate-non-ref-type [value type]
-  (if-let [java-type (get datomic-java-type-map type)]
-    (if (instance? java-type value)
+(defn validate-type [datomic-type value]
+  (if-let [valid-types (->> (get valid-types datomic-type)
+                            (to-coll))]
+    (if (some #(isa? (class value) %) valid-types)
       value
-      (incorrect-type-error value type))
-    (unrecognised-type-error type datomic-java-type-map)))
-
-
-
-;;TODO - do a check for whether the keyword actually exists
-(defn validate-type
-  ([db type value]
-   (if (= type :db.type/ref)
-     (validate-ref-type db value)
-     (validate-non-ref-type value type))))
+      (incorrect-type-error value datomic-type valid-types))
+    (unrecognised-type-error datomic-type valid-types)))
 
 (defn validate-value [db field val]
   (let [valueType (get-in field [:field/schema :db/valueType :db/ident])
-        schema-type (get-in field [:field/entity-schema-type :db/ident])
-        {:keys [:entity.schema/sub-type] :as type-checked-val} (validate-type db valueType val)]
+        type-checked-val (validate-type valueType val)]
     (if (or (error? type-checked-val) (not= valueType :db.type/ref))
       type-checked-val
-      (->> (es/derive-schema db schema-type sub-type)
-           (validate-entity db type-checked-val)))))
+      (if (keyword? type-checked-val)                       ;; enum type entity values
+         (if-let [pulled-entity (d/pull db '[:db/ident] type-checked-val)]
+           (:db/ident pulled-entity)
+           (incorrect-ident-error type-checked-val))
+        (->> (es/derive-schema db field type-checked-val)
+             (validate-entity db type-checked-val))))))
 
 (defn validate-field [db entity-schema field entity]
   (let [{nullable?                                 :field/nullable?
@@ -110,6 +97,7 @@
        (if (not nullable?)
          (not-nullable-error type-id field-ident)))]))
 
+
 (defn validate-entity
   [db
    entity
@@ -121,8 +109,9 @@
 
 (defn validate
   "returns a structurally similar version of the entity with error information"
-  ([db schema-type {:keys [:entity.schema/sub-type] :as entity}]
-   (->> (es/derive-schema db schema-type sub-type)
+  ([db schema-type entity]
+   (->> (es/derive-schema db {:field/entity-schema-type
+                              {:db/ident schema-type}} entity)
         (validate-entity db entity))))
 
 (defn valid?

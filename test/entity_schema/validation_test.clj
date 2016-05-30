@@ -52,9 +52,10 @@
 
   (testing "Test wrong type validation"
     (is (= [:test-entity/double-field
-            {:error/data    {:actual-type   :db.type/string
-                             :expected-type :db.type/double
-                             :value         "bob"}
+            {:error/data    {:datomic-type :db.type/double
+                             :value-type   java.lang.String
+                             :valid-types  #{java.lang.Double}
+                             :value        "bob"}
              :error/message "Incorrect Value Type"
              :error/type    :error.type/incorrect-type}]
 
@@ -80,9 +81,10 @@
                               (assert (= schema {:b 1}))
                               entity)
                             #'es/derive-schema
-                            (fn [db schema-type type]
-                              (assert (= db "db"))
-                              (assert (nil? type))
+                            (fn [db field entity]
+                              (assert (not (nil? db)))
+                              (assert (get-in field [:field/entity-schema-type :db/ident]))
+                              (assert (get entity :a))
                               {:b 1})}
 
              #(v/validate-field "db"
@@ -90,7 +92,7 @@
 
                                 {:field/schema        {:db/ident     :test-entity/ref-field
                                                        :db/valueType {:db/ident :db.type/ref}}
-                                 :field/entity-schema {:db/ident :some-schema} ;;fake entity-schema
+                                 :field/entity-schema-type {:db/ident :some-schema} ;;fake entity-schema
                                  :field/nullable?     false}
 
                                 {:test-entity/double-field "bob"
@@ -187,11 +189,12 @@
 
 
   (testing "Error Test"
-    (is (= {:test-entity/ref-field {:error/data    {:actual-type         java.lang.String
-                                                    :expected-java-types #{clojure.lang.Keyword
-                                                                           java.util.Map}
-                                                    :value               "Bob"}
-                                    :error/message "Ref type is incorrect"
+    (is (= {:test-entity/ref-field {:error/data    {:datomic-type :db.type/ref
+                                                    :valid-types  #{clojure.lang.Keyword
+                                                                    java.util.Map}
+                                                    :value        "Bob"
+                                                    :value-type   java.lang.String}
+                                    :error/message "Incorrect Value Type"
                                     :error/type    :error.type/incorrect-type}}
 
            (-> (create-db [{:db/id                (d/tempid :db.part/user)
@@ -214,11 +217,13 @@
                   :test-entity/ref-field "Bob"})))))
 
   (testing "Nested Error Test"
-    (is (= {:test-entity/ref-field {:test-entity/string-field {:error/data    {:actual-type   :db.type/double
-                                                                               :expected-type :db.type/string
-                                                                               :value         10.0}
-                                                               :error/message "Incorrect Value Type"
-                                                               :error/type    :error.type/incorrect-type}}}
+    (is (= {:test-entity/ref-field {:test-entity/string-field
+                                    {:error/data    {:datomic-type :db.type/string
+                                                     :valid-types  #{java.lang.String}
+                                                     :value        10.0
+                                                     :value-type   java.lang.Double}
+                                     :error/message "Incorrect Value Type"
+                                     :error/type    :error.type/incorrect-type}}}
 
            (-> (create-db
                  [{:db/id                (d/tempid :db.part/user)
@@ -281,9 +286,10 @@
 
   (testing "Test Cardinality Many With Error"
     (is (= {:test-entity/ref-many-field #{{:test-entity/string-field "Bob"}
-                                          {:test-entity/string-field {:error/data    {:actual-type   :db.type/double
-                                                                                      :expected-type :db.type/string
-                                                                                      :value         10.0}
+                                          {:test-entity/string-field {:error/data    {:datomic-type :db.type/string
+                                                                                      :valid-types  #{java.lang.String}
+                                                                                      :value        10.0
+                                                                                      :value-type   java.lang.Double}
                                                                       :error/message "Incorrect Value Type"
                                                                       :error/type    :error.type/incorrect-type}}}}
 
@@ -325,63 +331,63 @@
   (testing "Test matching multiple versons of one shcema"
     (is (= {:test-entity/string-field "Bob"}
 
-           (-> (create-db [{:db/id                     (d/tempid :db.part/user)
+           (-> (create-db [{:db/id                  (d/tempid :db.part/user)
 
-                            :entity.schema/type        {:db/id    (d/tempid :db.part/user -1)
-                                                        :db/ident :entity.schema.type/test-type}
+                            :entity.schema/type     {:db/id    (d/tempid :db.part/user -1)
+                                                     :db/ident :entity.schema.type/test-type}
                             :entity.schema/sub-type {:db/id    (d/tempid :db.part/user)
-                                                        :db/ident :entity.type/test-type}
-                            :entity.schema/fields      [{:db/id           (d/tempid :db.part/user)
-                                                         :field/schema    :test-entity/string-field
-                                                         :field/nullable? false}]}
+                                                     :db/ident :entity.type/test-type}
+                            :entity.schema/fields   [{:db/id           (d/tempid :db.part/user)
+                                                      :field/schema    :test-entity/string-field
+                                                      :field/nullable? false}]}
 
-                           {:db/id                     (d/tempid :db.part/user)
+                           {:db/id                  (d/tempid :db.part/user)
 
-                            :entity.schema/type        {:db/id    (d/tempid :db.part/user -1)
-                                                        :db/ident :entity.schema.type/test-type}
+                            :entity.schema/type     {:db/id    (d/tempid :db.part/user -1)
+                                                     :db/ident :entity.schema.type/test-type}
 
                             :entity.schema/sub-type {:db/id    (d/tempid :db.part/user)
-                                                        :db/ident :entity.type/test-type2}
+                                                     :db/ident :entity.type/test-type2}
 
-                            :entity.schema/fields      [{:db/id           (d/tempid :db.part/user)
-                                                         :field/schema    :test-entity/string-field
-                                                         :field/nullable? false}
-                                                        {:db/id           (d/tempid :db.part/user)
-                                                         :field/schema    :test-entity/string-field2
-                                                         :field/nullable? false}]}])
+                            :entity.schema/fields   [{:db/id           (d/tempid :db.part/user)
+                                                      :field/schema    :test-entity/string-field
+                                                      :field/nullable? false}
+                                                     {:db/id           (d/tempid :db.part/user)
+                                                      :field/schema    :test-entity/string-field2
+                                                      :field/nullable? false}]}])
                (v/validate
                  :entity.schema.type/test-type
-                 {:entity.schema/sub-type              :entity.type/test-type
+                 {:entity.schema/sub-type   :entity.type/test-type
                   :test-entity/string-field "Bob"})))))
 
   (testing "Test Error on not suppying enough info to resolve schema"
     (is (thrown-with-msg? AssertionError #"Assert failed: There is more than one schema of type"
                           (= {:test-entity/string-field "Bob"}
 
-                             (-> (create-db [{:db/id                     (d/tempid :db.part/user)
+                             (-> (create-db [{:db/id                  (d/tempid :db.part/user)
 
-                                              :entity.schema/type        {:db/id    (d/tempid :db.part/user -1)
-                                                                          :db/ident :entity.schema.type/test-type}
+                                              :entity.schema/type     {:db/id    (d/tempid :db.part/user -1)
+                                                                       :db/ident :entity.schema.type/test-type}
                                               :entity.schema/sub-type {:db/id    (d/tempid :db.part/user)
-                                                                          :db/ident :entity.type/test-type}
-                                              :entity.schema/fields      [{:db/id           (d/tempid :db.part/user)
-                                                                           :field/schema    :test-entity/string-field
-                                                                           :field/nullable? false}]}
+                                                                       :db/ident :entity.type/test-type}
+                                              :entity.schema/fields   [{:db/id           (d/tempid :db.part/user)
+                                                                        :field/schema    :test-entity/string-field
+                                                                        :field/nullable? false}]}
 
-                                             {:db/id                     (d/tempid :db.part/user)
+                                             {:db/id                  (d/tempid :db.part/user)
 
-                                              :entity.schema/type        {:db/id    (d/tempid :db.part/user -1)
-                                                                          :db/ident :entity.schema.type/test-type}
+                                              :entity.schema/type     {:db/id    (d/tempid :db.part/user -1)
+                                                                       :db/ident :entity.schema.type/test-type}
 
                                               :entity.schema/sub-type {:db/id    (d/tempid :db.part/user)
-                                                                          :db/ident :entity.type/test-type2}
+                                                                       :db/ident :entity.type/test-type2}
 
-                                              :entity.schema/fields      [{:db/id           (d/tempid :db.part/user)
-                                                                           :field/schema    :test-entity/string-field
-                                                                           :field/nullable? false}
-                                                                          {:db/id           (d/tempid :db.part/user)
-                                                                           :field/schema    :test-entity/string-field2
-                                                                           :field/nullable? false}]}])
+                                              :entity.schema/fields   [{:db/id           (d/tempid :db.part/user)
+                                                                        :field/schema    :test-entity/string-field
+                                                                        :field/nullable? false}
+                                                                       {:db/id           (d/tempid :db.part/user)
+                                                                        :field/schema    :test-entity/string-field2
+                                                                        :field/nullable? false}]}])
                                  (v/validate
                                    :entity.schema.type/test-type
                                    {:test-entity/string-field "Bob"})))))))

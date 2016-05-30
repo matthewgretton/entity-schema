@@ -57,7 +57,7 @@
 
 (defn pull-schema-by-id [db entity-schema-id]
   (d/pull db '[:db/ident
-              { :entity.schema/type [:db/ident]}
+               {:entity.schema/type [:db/ident]}
                {:entity.schema/fields [{:field/schema [:db/ident
                                                        {:db/cardinality [:db/ident]}
                                                        {:db/valueType [:db/ident]}]}
@@ -86,28 +86,20 @@
 
 
 ;; So every schema has a unique reference, it is either just the schema type or the schema type and the entity type???
-(defn derive-schema [db schema-type entity-type]
-  "Derive the schema from the entity"
+(defn derive-schema "Derive the schema from the entity"
+  [db field entity]
   (assert (not (nil? db)))
-  (assert (not (nil? schema-type)))
-  (if (nil? entity-type)
-    (let [pulled-schemas (pull-schema-by-type db schema-type)]
-      (assert (= (count pulled-schemas) 1) (str "There is more than one schema of type " schema-type "\n"
-                                                (with-out-str (clojure.pprint/pprint pulled-schemas))))
-      (first pulled-schemas))
-    (pull-schema-by-type db schema-type entity-type)))
+  (let [{{schema-type :db/ident} :field/entity-schema-type} field
+        {sub-type :entity.schema/sub-type} entity]
+    (if (nil? sub-type)
+      (let [schema-type schema-type
+            pulled-schemas (pull-schema-by-type db schema-type)]
+        (assert (= (count pulled-schemas) 1) (str "There is more than one schema of type " schema-type "\n"
+                                                  (with-out-str (clojure.pprint/pprint pulled-schemas))))
+        (first pulled-schemas))
+      (pull-schema-by-type db schema-type sub-type))))
 
 
-
-;(defn derive-schema [db {{schema-type :db/ident} :field/entity-schema-type} {sub-type :entity.schema/sub-type}]
-;  "Derive the schema from the entity"
-;  (assert (not (nil? db)))
-;  (assert (not (nil? schema-type)))
-;  (if (nil? sub-type)
-;    (let [pulled-schemas (pull-schema-by-type db schema-type)]
-;      (assert (= (count pulled-schemas) 1) (str "There is more than one schema of type " schema-type " " pulled-schemas))
-;      (first pulled-schemas))
-;    (pull-schema-by-type db schema-type sub-type)))
 
 
 
