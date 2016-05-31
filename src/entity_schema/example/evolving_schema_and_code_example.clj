@@ -58,7 +58,7 @@
 ;; create a test funding circle entity
 (def fc-entity
   {
-   :funding-channel/funding-channel-uuid         (UUID/randomUUID)
+   :funding-channel/uuid         (UUID/randomUUID)
    :funding-channel/referral-only?               false
    :funding-channel/scale-allocation-percentage? true
    :funding-channel/allocation-percentage        0.7M
@@ -86,10 +86,11 @@
 
 
 
-;; Using this technique we can validate consistently with respect to time, however that's not the entire story.
+;; Using this technique we can validate consistently with respect to time, however that's not quite enough.
 ;; In reality, schema changes are only needed when code that uses those entities changes. So ideally, you would want
-;; to evolve code with schema changes atomically. Datomic has a function type so we can in fact do this. For example,
-;; business logic on the Janus platform is contained in stateless handler functions (both tublines and samza)
+;; to evolve code with schema changes atomically. Datomic has a function type so we can in fact do this.
+;; For example, the business logic on the Janus platform is contained in stateless handler functions
+;; (both tublines and samza). These could be candidates for storing in the db.
 
 
 ;; As an example let's define a handler function that does something with an entity.
@@ -131,13 +132,14 @@
 (hndlr {})                                                  ;"Default"
 
 ;; Let's define a simple function which takes a entity type id, a handler function id and an entity.
-;; The function first validates the entity and then executes the function. The function that all entities passed to
-;; it have an :entity/instant attribute that signifies when the entity
+;; The function first validates the entity and then executes the function. The function assumes that all entities
+;; passed to it have an :entity/instant attribute that signifies when the entity was created, and is used to work out
+;; which schema to validate it with
 (defn validate-and-execute [db
                             schema-type
                             handler-function-id
                             {:keys [:entity/instant] :as entity}]
-  (let [db-at-instant (d/as-of db instant)                  ;; get history consistent db
+  (let [db-at-instant (d/as-of db instant)                  ;; get history consistent db snapshot
         hndlr-fn (->> (d/pull db-at-instant '[:db/fn] handler-function-id)
                       :db/fn)                               ;; get the history consistent function
         ]

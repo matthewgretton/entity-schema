@@ -1,9 +1,6 @@
 (ns entity-schema.entity-schema
   (:require [datomic.api :as d]))
 
-
-
-
 (def entity-schema-fields
   [
    {:db/id                 (d/tempid :db.part/db)
@@ -52,19 +49,16 @@
    ]
   )
 
-
-
-
 (defn pull-schema-by-id [db entity-schema-id]
   (d/pull db '[:db/ident
                {:entity.schema/type [:db/ident]}
+               {:entity.schema/sub-type [:db/ident]}
                {:entity.schema/fields [{:field/schema [:db/ident
                                                        {:db/cardinality [:db/ident]}
                                                        {:db/valueType [:db/ident]}]}
                                        {:field/entity-schema-type [:db/ident]}
                                        :field/nullable?]}
                {:entity.schema/natural-key [:db/ident]}] entity-schema-id))
-
 
 (defn pull-schema-by-type
   ([db schema-type entity-type]
@@ -84,7 +78,6 @@
         (map (partial pull-schema-by-id db))
         (into #{}))))
 
-
 ;; So every schema has a unique reference, it is either just the schema type or the schema type and the entity type???
 (defn derive-schema "Derive the schema from the entity"
   [db field entity]
@@ -98,10 +91,6 @@
                                                   (with-out-str (clojure.pprint/pprint pulled-schemas))))
         (first pulled-schemas))
       (pull-schema-by-type db schema-type sub-type))))
-
-
-
-
 
 (defn set-nullibility?-tx [db entity-id field-id nullable?]
   (->> (d/q '[:find ?f
