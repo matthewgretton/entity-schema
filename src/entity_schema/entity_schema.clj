@@ -81,12 +81,13 @@
 ;; So every schema has a unique reference, it is either just the schema type or the schema type and the entity type???
 (defn derive-schema "Derive the schema from the entity"
   [db field entity]
+
   (assert (not (nil? db)))
   (let [{{schema-type :db/ident} :field/entity-schema-type} field
         {sub-type :entity.schema/sub-type} entity]
+    (assert (not (nil? schema-type)))
     (if (nil? sub-type)
-      (let [schema-type schema-type
-            pulled-schemas (pull-schema-by-type db schema-type)]
+      (let [pulled-schemas (pull-schema-by-type db schema-type)]
         (assert (= (count pulled-schemas) 1) (str "There is more than one schema of type " schema-type "\n"
                                                   (with-out-str (clojure.pprint/pprint pulled-schemas))))
         (first pulled-schemas))

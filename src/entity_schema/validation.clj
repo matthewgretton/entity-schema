@@ -7,35 +7,6 @@
 
 
 
-(defmacro error->
-  "When expr is not error?, threads it into the first form (via ->),
-  and when that result is not error?, through the next etc"
-  {:added "1.5"}
-  [expr & forms]
-  (let [g (gensym)
-        steps (map (fn [step] `(if (error? ~g) ~g (-> ~g ~step)))
-                   forms)]
-    `(let [~g ~expr
-           ~@(interleave (repeat g) (butlast steps))]
-       ~(if (empty? steps)
-          g
-          (last steps)))))
-
-(defmacro error->>
-  "When expr is not error?, threads it into the first form (via ->>),
-  and when that result is not error?, through the next etc"
-  {:added "1.5"}
-  [expr & forms]
-  (let [g (gensym)
-        steps (map (fn [step] `(if (error? ~g) ~g (->> ~g ~step)))
-                   forms)]
-    `(let [~g ~expr
-           ~@(interleave (repeat g) (butlast steps))]
-       ~(if (empty? steps)
-          g
-          (last steps)))))
-
-
 
 
 (defn to-coll [x]
@@ -94,35 +65,6 @@
 (defn error? [v]
   (and (map? v) (contains? v :error/type)))
 
-
-(defmacro error->
-  "When expr is not error?, threads it into the first form (via ->),
-  and when that result is not error?, through the next etc"
-  {:added "1.5"}
-  [expr & forms]
-  (let [g (gensym)
-        steps (map (fn [step] `(if (error? ~g) ~g (-> ~g ~step)))
-                   forms)]
-    `(let [~g ~expr
-           ~@(interleave (repeat g) (butlast steps))]
-       ~(if (empty? steps)
-          g
-          (last steps)))))
-
-(defmacro error->>
-  "When expr is not error?, threads it into the first form (via ->>),
-  and when that result is not error?, through the next etc"
-  {:added "1.5"}
-  [expr & forms]
-  (let [g (gensym)
-        steps (map (fn [step] `(if (error? ~g) ~g (->> ~g ~step)))
-                   forms)]
-    `(let [~g ~expr
-           ~@(interleave (repeat g) (butlast steps))]
-       ~(if (empty? steps)
-          g
-          (last steps)))))
-
 (defn validate-type [datomic-type value]
   (if-let [valid-types (->> (get valid-types datomic-type)
                             (to-coll))]
@@ -131,14 +73,12 @@
       (incorrect-type-error value datomic-type valid-types))
     (unrecognised-type-error datomic-type valid-types)))
 
-
-
-
-;(defn validate-type [])
-;
-;(defn transform-value [])
-;
-;(defn validate [])
+(defn expand-ref [db type-checked-val]
+  (if (keyword? type-checked-val)
+    (if-let [x (es/pull-schema-by-id db type-checked-val)]
+      x
+      (incorrect-ident-error type-checked-val))
+    type-checked-val))
 
 
 (defn validate-value [db field val]
@@ -146,18 +86,11 @@
         type-checked-val (validate-type valueType val)]
     (if (or (error? type-checked-val) (not= valueType :db.type/ref))
       type-checked-val
-      (let [expanded-entity (cond (map? type-checked-val)
-                                  type-checked-val
-
-                                  (keyword? type-checked-val)
-                                  (if-let [x (es/pull-schema-by-id db type-checked-val)]
-                                                                x
-                                                                (incorrect-ident-error type-checked-val)))]
-
-        (if (error? expanded-entity)
-          expanded-entity
-          (->> (es/derive-schema db field expanded-entity)
-               (validate-entity db expanded-entity)))))))
+      (let [entity (expand-ref db type-checked-val)]
+        (if (error? entity)
+          entity
+          (->> (es/derive-schema db field entity)
+               (validate-entity db entity)))))))
 
 (defn validate-field [db entity-schema field entity]
   (let [{nullable?                                 :field/nullable?
