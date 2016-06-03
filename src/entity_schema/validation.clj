@@ -73,20 +73,24 @@
       (incorrect-type-error value datomic-type valid-types))
     (unrecognised-type-error datomic-type valid-types)))
 
-(defn expand-ref [db type-checked-val]
+(defn expand-ref [db schema-type type-checked-val]
+  #spy/p schema-type
   (if (keyword? type-checked-val)
     (if-let [x (es/pull-schema-by-id db type-checked-val)]
       x
       (incorrect-ident-error type-checked-val))
     type-checked-val))
 
+(require '[spyscope.core])
 
-(defn validate-value [db field val]
+
+(defn validate-value [db  field val]
   (let [valueType (get-in field [:field/schema :db/valueType :db/ident])
         type-checked-val (validate-type valueType val)]
     (if (or (error? type-checked-val) (not= valueType :db.type/ref))
       type-checked-val
-      (let [entity (expand-ref db type-checked-val)]
+      (let [schema-type (get-in field [:field/entity-schema-type :db/ident])
+            entity (expand-ref db schema-type type-checked-val)]
         (if (error? entity)
           entity
           (->> (es/derive-schema db field entity)

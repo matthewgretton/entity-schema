@@ -170,13 +170,11 @@
 (def include-eligiblity-schema
   [
    {:db/id    (d/tempid :db.part/user -1)
-    :db/ident :entity.schema.type/enum} ;;risk band entity type
-   {:db/id    (d/tempid :db.part/user -2)
     :db/ident :entity.schema.type/risk-band}
+
    {:db/id                (d/tempid :db.part/user)
     :db/ident             :entity.schema/risk-band
     :entity.schema/type   (d/tempid :db.part/user -1)
-    :entity.schema/sub-type (d/tempid :db.part/user -2)
     :entity.schema/fields #{{:db/id           (d/tempid :db.part/user)
                              :field/schema    :db/ident
                              :field/nullable? false}}}
