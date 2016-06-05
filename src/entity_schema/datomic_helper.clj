@@ -18,27 +18,27 @@
                      (maybe-assoc :doc doc-string)
                      (dissoc :requires :imports))]
     `(def ~(vary-meta name merge metadata)
-       (datomic.api/function {:lang "clojure"
-                              :params '~params
+       (datomic.api/function {:lang     "clojure"
+                              :params   '~params
                               :requires ~(:requires attr-map)
-                              :imports ~(:imports attr-map)
-                              :code '(do ~@body)}))))
+                              :imports  ~(:imports attr-map)
+                              :code     '(do ~@body)}))))
 
 
 (defn build-query-map [db natural-key entity]
   (let [ent-sym '?e
         [where in args] (->> (map vector natural-key (range (count natural-key)))
-                               (reduce
-                                 (fn [[wh in prms] [att i]]
-                                   (if-let [v (get entity att)]
-                                     (let [sym (symbol (str "?" i))]
-                                       [(conj wh [ent-sym att sym]) (conj in sym) (conj prms v)])
-                                     [(list 'not [ent-sym att '_]) in prms]))
-                                 [[] ['$] [db]]))]
+                             (reduce
+                               (fn [[wh in prms] [att i]]
+                                 (if-let [v (get entity att)]
+                                   (let [sym (symbol (str "?" i))]
+                                     [(conj wh [ent-sym att sym]) (conj in sym) (conj prms v)])
+                                   [(conj wh (list 'not [ent-sym att '_])) in prms]))
+                               [[] ['$] [db]]))]
     {:query {:find  [ent-sym]
              :in    in
              :where where}
-     :args args}))
+     :args  args}))
 
 
 

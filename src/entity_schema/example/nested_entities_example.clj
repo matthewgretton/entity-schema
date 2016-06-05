@@ -224,5 +224,5 @@
      (v/valid?))
 
 
-(->> (dh/build-query-map (d/db conn) [:db/ident] {:db/ident :db.cardinality/many})
+(->> (dh/build-query-map (d/db conn) [:db/ident :entity.schema/fields] {:db/ident :db.cardinality/many})
      (d/query))
