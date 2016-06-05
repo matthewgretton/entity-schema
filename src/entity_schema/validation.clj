@@ -5,10 +5,6 @@
            (java.util UUID Date Map)
            (clojure.lang Keyword)))
 
-
-
-
-
 (defn to-coll [x]
   (if (coll? x) x #{x}))
 
@@ -74,14 +70,12 @@
     (unrecognised-type-error datomic-type valid-types)))
 
 (defn expand-ref [db schema-type type-checked-val]
-  #spy/p schema-type
   (if (keyword? type-checked-val)
     (if-let [x (es/pull-schema-by-id db type-checked-val)]
       x
       (incorrect-ident-error type-checked-val))
     type-checked-val))
 
-(require '[spyscope.core])
 
 
 (defn validate-value [db  field val]

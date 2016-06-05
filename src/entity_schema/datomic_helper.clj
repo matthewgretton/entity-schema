@@ -25,5 +25,21 @@
                               :code '(do ~@body)}))))
 
 
+(defn build-query-map [db natural-key entity]
+  (let [ent-sym '?e
+        [where in args] (->> (map vector natural-key (range (count natural-key)))
+                               (reduce
+                                 (fn [[wh in prms] [att i]]
+                                   (if-let [v (get entity att)]
+                                     (let [sym (symbol (str "?" i))]
+                                       [(conj wh [ent-sym att sym]) (conj in sym) (conj prms v)])
+                                     [(list 'not [ent-sym att '_]) in prms]))
+                                 [[] ['$] [db]]))]
+    {:query {:find  [ent-sym]
+             :in    in
+             :where where}
+     :args args}))
+
+
 
 

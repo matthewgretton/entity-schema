@@ -93,6 +93,11 @@
         (first pulled-schemas))
       (pull-schema-by-type db schema-type sub-type))))
 
+
+
+
+
+
 (defn set-nullibility?-tx [db entity-id field-id nullable?]
   (->> (d/q '[:find ?f
               :in $ ?e ?s
@@ -102,12 +107,6 @@
        (map (fn [f]
               [:db/add f :field/nullable? nullable?]))
        (first)))
-
-
-
-
-
-
 
 
 

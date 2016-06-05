@@ -222,3 +222,7 @@
 
 (->> (v/validate modified-eligibility-db :entity.schema.type/funding-channel modified-full-fc-entity)
      (v/valid?))
+
+
+(->> (dh/build-query-map (d/db conn) [:db/ident] {:db/ident :db.cardinality/many})
+     (d/query))
