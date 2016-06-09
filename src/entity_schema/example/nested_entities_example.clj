@@ -135,18 +135,23 @@
 
 ;; create new fields and new schema:
 
-;
+;TODO is this better than just having an enum, schema type with the values???
 (def risk-band-enum-values
   [{:db/id    (d/tempid :db.part/user)
-    :db/ident :risk-band/Aplus}
+    :db/ident :risk-band/Aplus
+    :entity.schema/type :entity.schema.type/risk-band}
    {:db/id    (d/tempid :db.part/user)
-    :db/ident :risk-band/A}
+    :db/ident :risk-band/A
+    :entity.schema/type :entity.schema.type/risk-band}
    {:db/id    (d/tempid :db.part/user)
-    :db/ident :risk-band/B}
+    :db/ident :risk-band/B
+    :entity.schema/type :entity.schema.type/risk-band}
    {:db/id    (d/tempid :db.part/user)
-    :db/ident :risk-band/C}
+    :db/ident :risk-band/C
+    :entity.schema/type :entity.schema.type/risk-band}
    {:db/id    (d/tempid :db.part/user)
-    :db/ident :risk-band/D}
+    :db/ident :risk-band/D
+    :entity.schema/type :entity.schema.type/risk-band}
    ])
 
 (def eligibility-criterion-fields

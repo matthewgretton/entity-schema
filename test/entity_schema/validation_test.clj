@@ -44,6 +44,7 @@
                              {:entity.schema/type {:db/ident :entity.schema.type/test-type}}
 
                              {:field/schema    {:db/ident     :test-entity/double-field
+
                                                 :db/valueType {:db/ident :db.type/double}}
                               :field/nullable? false}
 

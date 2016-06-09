@@ -5,8 +5,11 @@
            (java.util UUID Date Map)
            (clojure.lang Keyword)))
 
+(defn non-map-coll? [x]
+  (and (coll? x) (not (map? x))))
+
 (defn to-coll [x]
-  (if (coll? x) x #{x}))
+  (if (non-map-coll? x) x #{x}))
 
 (def valid-types
   {
@@ -46,17 +49,23 @@
          {:type            type
           :recognised-keys type-map}))
 
-
-(defn incorrect-ident-error [ident]
+(defn incorrect-ident-error [schema-type ident]
   (error :error.type/incorrect-type
          ":db/ident keyword does not refer to a transacted entity"
-         {:db/ident ident}))
+         {:db/ident           ident
+          :entity.schema/type schema-type}))
 
 (defn not-nullable-error [type-ident field]
   (error :error.type/required-field
          "Required Field"
          {:field field
           :type  type-ident}))
+
+(defn cardinality-error [field val]
+  (error :error.type/cardinality
+         "Value associated with cardinality one field should not be a collection"
+         {:att field
+          :val val}))
 
 (defn error? [v]
   (and (map? v) (contains? v :error/type)))
@@ -71,40 +80,41 @@
 
 (defn expand-ref [db schema-type type-checked-val]
   (if (keyword? type-checked-val)
-    (if-let [x (es/pull-schema-by-id db type-checked-val)]
-      x
-      (incorrect-ident-error type-checked-val))
+    (if-let [e (es/pull-schema-by-id db type-checked-val)]
+      (if (= (get-in e [:entity.schema/type :db/ident]) schema-type)
+        e
+        (incorrect-ident-error schema-type type-checked-val))
+      (incorrect-ident-error schema-type type-checked-val))
     type-checked-val))
 
-
-
-(defn validate-value [db  field val]
-  (let [valueType (get-in field [:field/schema :db/valueType :db/ident])
-        type-checked-val (validate-type valueType val)]
-    (if (or (error? type-checked-val) (not= valueType :db.type/ref))
-      type-checked-val
-      (let [schema-type (get-in field [:field/entity-schema-type :db/ident])
-            entity (expand-ref db schema-type type-checked-val)]
-        (if (error? entity)
-          entity
-          (->> (es/derive-schema db field entity)
-               (validate-entity db entity)))))))
-
 (defn validate-field [db entity-schema field entity]
-  (let [{nullable?                                 :field/nullable?
+  (let [{nullable?                               :field/nullable?
          {field-ident             :db/ident
-          {cardinality :db/ident} :db/cardinality} :field/schema} field
-        {{type-id :db/ident} :entity.schema/type} entity-schema]
+          {cardinality :db/ident} :db/cardinality
+          {valueType :db/ident}   :db/valueType} :field/schema} field
+        {{schema-type-id :db/ident} :entity.schema/type} entity-schema]
     [field-ident
      (if (contains? entity field-ident)
-       (let [val (get entity field-ident)]
+       (let [val (get entity field-ident)
+             validated-vals (->> (to-coll val)              ;if val is a single value put into a collection
+                                 (map (fn [v]
+                                        (let [type-checked-val (validate-type valueType v)]
+                                          (if (or (error? type-checked-val) (not= valueType :db.type/ref))
+                                            type-checked-val
+                                            (let [entity (expand-ref db schema-type-id type-checked-val)]
+                                              (if (error? entity)
+                                                entity
+                                                (->> (es/derive-schema db field entity)
+                                                     (validate-entity db entity))))))))
+                                 (into #{}))]
          (if (= cardinality :db.cardinality/many)
-           (->> (to-coll val)                               ;if val is a single value put into a collection
-                (map (partial validate-value db field))
-                (into #{}))
-           (validate-value db field val)))
+           validated-vals
+           (if (non-map-coll? val)
+             (cardinality-error field-ident val)
+             (first validated-vals))))
        (if (not nullable?)
-         (not-nullable-error type-id field-ident)))]))
+         (not-nullable-error schema-type-id field-ident)))]))
+
 
 
 (defn validate-entity

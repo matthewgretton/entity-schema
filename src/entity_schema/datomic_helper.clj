@@ -29,16 +29,19 @@
   (let [ent-sym '?e
         [where in args] (->> (map vector natural-key (range (count natural-key)))
                              (reduce
-                               (fn [[wh in prms] [att i]]
+                               (fn [[wh in args] [att i]]
                                  (if-let [v (get entity att)]
                                    (let [sym (symbol (str "?" i))]
-                                     [(conj wh [ent-sym att sym]) (conj in sym) (conj prms v)])
-                                   [(conj wh (list 'not [ent-sym att '_])) in prms]))
+                                     [(conj wh [ent-sym att sym]) (conj in sym) (conj args v)])
+                                   [(conj wh (list 'not [ent-sym att '_])) in args]))
                                [[] ['$] [db]]))]
     {:query {:find  [ent-sym]
              :in    in
              :where where}
      :args  args}))
+
+
+
 
 
 
