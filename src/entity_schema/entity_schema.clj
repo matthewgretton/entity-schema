@@ -17,6 +17,12 @@
 
    {:db/id                 (d/tempid :db.part/db)
     :db.install/_attribute :db.part/db
+    :db/ident              :field/entity-schema
+    :db/valueType          :db.type/ref
+    :db/cardinality        :db.cardinality/one}
+
+   {:db/id                 (d/tempid :db.part/db)
+    :db.install/_attribute :db.part/db
     :db/ident              :field/entity-schema-type
     :db/valueType          :db.type/ref
     :db/cardinality        :db.cardinality/one}

@@ -5,7 +5,6 @@
   (str "datomic:mem://" db-name "-" (d/squuid)))
 
 
-
 (defn maybe-assoc [m k v]
   (if v (assoc m k v) m))
 
@@ -39,6 +38,18 @@
              :in    in
              :where where}
      :args  args}))
+
+(defn look-up-entity-by-natural-key [db natural-key entity]
+  (let [query-map (build-query-map db natural-key entity)
+        r (d/query query-map)]
+    (if (not (empty? r))
+      (do (assert (= 1 (count r)) (str "Query result should only return one result \n"
+                                       "natural-key:\n" (with-out-str (clojure.pprint/pprint natural-key)) "\n"
+                                       "entity:\n" (with-out-str (clojure.pprint/pprint entity)) "\n"
+                                       "query-map\n" (with-out-str (clojure.pprint/pprint query-map)) "\n"
+                                       "result:\n" (with-out-str (clojure.pprint/pprint r))
+                                       ))
+          (->> r (first) (first))))))
 
 
 
