@@ -140,7 +140,7 @@
                     :db/ident              :test-entity/string-many-field
                     :db/valueType          :db.type/string
                     :db/cardinality        :db.cardinality/many}]]
-    @(d/transact conn es/entity-schema-fields)              ;;boot-strap
+    @(d/transact conn es/all-fields)              ;;boot-strap
     @(d/transact conn field-txs)
     @(d/transact conn entity-schema-txs)
     (d/db conn)))

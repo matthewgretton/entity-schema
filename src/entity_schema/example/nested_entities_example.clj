@@ -19,7 +19,7 @@
               (d/connect uri)))
 
 ;; boot-strap entity schema fields
-@(d/transact conn es/entity-schema-fields)
+@(d/transact conn es/all-fields)
 
 ;;funding channel
 

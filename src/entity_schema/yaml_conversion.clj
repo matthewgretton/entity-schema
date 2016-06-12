@@ -1,7 +1,8 @@
 (ns entity-schema.yaml-conversion
   (:require [clj-yaml.core :as yaml]
             [datomic.api :as d]
-            [entity-schema.entity-schema :as es]))
+            [entity-schema.entity-schema :as es]
+            [entity-schema.datomic-helper :as dh]))
 
 
 (def yaml-datomic-type-map
@@ -75,12 +76,13 @@
 
 (defn yaml->entity-schema-tx [{:keys [:name :natural_key :columns]}]
   {
-   :db/id                     (d/tempid :db.part/user)
+   :db/id                     (d/tempid :db.part/entity-schema)
 
    :db/ident                  (keyword "entity.schema" (prettify-name name))
 
-   :entity.schema/type        {:db/id    (d/tempid :db.part/user)
+   :entity.schema/type        {:db/id    (d/tempid :db.part/entity-schema)
                                :db/ident (keyword "entity.schema.type" (prettify-name name))}
+   :entity.schema/part        :db.part/entity
 
    :entity.schema/fields      (->> columns
                                    (filter #(not= (:name %) "id"))
@@ -89,7 +91,7 @@
 
    :entity.schema/natural-key (->> (to-coll natural_key)
                                    (map #(create-db-ident name %))
-                                   (into #{}))
+                                   (dh/build-datomic-linked-list :db.part/entity-schema))
    })
 
 

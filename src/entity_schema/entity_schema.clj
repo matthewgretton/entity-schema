@@ -1,8 +1,46 @@
 (ns entity-schema.entity-schema
-  (:require [datomic.api :as d]))
+  (:require [datomic.api :as d]
+            [entity-schema.datomic-helper :as dh]))
+
+
+
+(def linked-list-fields
+  [{
+    :db/id                 (d/tempid :db.part/db)
+    :db/ident              :list/rest
+    :db/isComponent        true
+    :db/valueType          :db.type/ref
+    :db/cardinality        :db.cardinality/one
+    :db.install/_attribute :db.part/db
+    }
+
+   {
+    :db/id                 (d/tempid :db.part/db)
+    :db/ident              :list/first
+    :db/isComponent        true
+    :db/valueType          :db.type/ref
+    :db/cardinality        :db.cardinality/one
+    :db.install/_attribute :db.part/db
+    }])
+
+
 
 (def entity-schema-fields
   [
+   ;;custom partition for schema
+   {:db/id (d/tempid :db.part/db)
+    :db/ident :db.part/entity-schema
+    :db.install/_partition :db.part/db}
+
+
+   {:db/id (d/tempid :db.part/db)
+    :db/ident :db.part/entity-schema
+    :db.install/_partition :db.part/db}
+
+   {:db/id (d/tempid :db.part/db)
+    :db/ident :db.part/entity
+    :db.install/_partition :db.part/db}
+
    {:db/id                 (d/tempid :db.part/db)
     :db.install/_attribute :db.part/db
     :db/ident              :field/schema
@@ -35,9 +73,15 @@
 
    {:db/id                 (d/tempid :db.part/db)
     :db.install/_attribute :db.part/db
+    :db/ident              :entity.schema/part
+    :db/valueType          :db.type/ref
+    :db/cardinality        :db.cardinality/one}
+
+   {:db/id                 (d/tempid :db.part/db)
+    :db.install/_attribute :db.part/db
     :db/ident              :entity.schema/natural-key
     :db/valueType          :db.type/ref
-    :db/cardinality        :db.cardinality/many}
+    :db/cardinality        :db.cardinality/one}
 
    {:db/id                 (d/tempid :db.part/db)
     :db.install/_attribute :db.part/db
@@ -55,16 +99,24 @@
    ]
   )
 
+(def all-fields
+  (->> (concat linked-list-fields entity-schema-fields)
+       (into [])))
+
 (defn pull-schema-by-id [db entity-schema-id]
-  (d/pull db '[:db/ident
-               {:entity.schema/type [:db/ident]}
-               {:entity.schema/sub-type [:db/ident]}
-               {:entity.schema/fields [{:field/schema [:db/ident
-                                                       {:db/cardinality [:db/ident]}
-                                                       {:db/valueType [:db/ident]}]}
-                                       {:field/entity-schema-type [:db/ident]}
-                                       :field/nullable?]}
-               {:entity.schema/natural-key [:db/ident]}] entity-schema-id))
+  (-> (d/pull db '[:db/ident
+                    {:entity.schema/type [:db/ident]}
+                   {:entity.schema/part [:db/ident]}
+                    {:entity.schema/sub-type [:db/ident]}
+
+                    {:entity.schema/fields [{:field/schema [:db/ident
+                                                            {:db/cardinality [:db/ident]}
+                                                            {:db/valueType [:db/ident]}]}
+                                            {:field/entity-schema-type [:db/ident]}
+                                            :field/nullable?]}
+                    {:entity.schema/natural-key [{:list/first [:db/ident]}
+                                                 {:list/rest ...}]}] entity-schema-id)
+      (update :entity.schema/natural-key dh/from-linked-list-entity)))
 
 (defn pull-schema-by-type
   ([db schema-type entity-type]

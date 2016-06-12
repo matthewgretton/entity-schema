@@ -20,7 +20,7 @@
               (d/connect uri)))
 
 ;; boot-strap entity schema fields
-@(d/transact conn es/entity-schema-fields)
+@(d/transact conn es/all-fields)
 
 ;;funding channel
 
@@ -50,6 +50,7 @@
 @(d/transact conn e-field-txs)
 (def e-schema-tx (fy/yaml->entity-schema-tx e-data))
 @(d/transact conn [e-schema-tx])
+
 
 ;; immutable database snapshot
 (def first-draft-schema-db (d/db conn))
@@ -120,13 +121,12 @@
                                                     :eligibility-criterion/criterion-value     "#{false}"}}})
 
 
+(def tx (p/validate schema-with-joins-db
+                   :entity.schema.type/funding-channel
+                   full-fc-entity))
 
-(p/process (d/db conn) :entity.schema.type/funding-channel full-fc-entity)
+@(d/transact conn [tx])
 
-(dh/look-up-entity-by-natural-key (d/db conn)
-                                  '(:eligibility-criterion/criterion-type
-                                                          :eligibility-criterion/criterion-attribute
-                                                          :eligibility-criterion/criterion-value)
-                                  {:eligibility-criterion/criterion-type "Include",
-                                   :eligibility-criterion/criterion-attribute ":risk-band",
-                                   :eligibility-criterion/criterion-value "#{:Aplus :A :B :C :D}"})
+(p/process (d/db conn) :entity.schema.type/funding-channel
+           {} :command/look-up
+           full-fc-entity)
