@@ -172,8 +172,8 @@
      (partial merge-with (fn [l _] l))
      left right)))
 
-(defn apply-command [command-map default-command
-                     run-state
+(defn apply-command [command-map default-command run-state
+
                      db
                      {:keys [:db/ident
                              :entity.schema/natural-key
@@ -191,23 +191,23 @@
                               )]
     (if-let [id (dh/look-up-entity-by-natural-key db natural-key-list validated-entity)]
       ;;entity already exists
-      (cond (= command :command/insert) (entity-not-expected-to-exist-error natural-key-list validated-entity)
-            (= command :command/upsert) (assoc validated-entity :db/id id)
-            (= command :command/look-up) (assoc validated-entity :db/id id)
-            (= command :command/update) (assert false "Update not implemented yet")
-            (= command :command/delete) (assert false "Delete not implemented yet"))
+      [(cond (= command :command/insert) (entity-not-expected-to-exist-error natural-key-list validated-entity)
+             (= command :command/upsert) (assoc validated-entity :db/id id)
+             (= command :command/look-up) (assoc validated-entity :db/id id)
+             (= command :command/update) (assert false "Update not implemented yet")
+             (= command :command/delete) (assert false "Delete not implemented yet")) run-state]
       ;; entity does not exist
-      (cond (= command :command/insert) (if-let [id (get-in run-state ident natural-key-vals)]
+      (cond (= command :command/insert) (if-let [id (get-in run-state [ident natural-key-vals])]
                                           [(assoc validated-entity :db/id id) run-state]
                                           (let [new-id (d/tempid (:db/ident part))]
                                             [(assoc validated-entity :db/id new-id) (combine run-state ident natural-key-vals new-id)]))
-            (= command :command/upsert) (if-let [id (get-in run-state ident natural-key-vals)]
+            (= command :command/upsert) (if-let [id (get-in run-state [ident natural-key-vals])]
                                           [(assoc validated-entity :db/id id) run-state]
                                           (let [new-id (d/tempid (:db/ident part))]
                                             [(assoc validated-entity :db/id new-id) (combine run-state ident natural-key-vals new-id)]))
-            (= command :command/look-up) (entity-expected-to-exist-error natural-key-list validated-entity)
-            (= command :command/update) (entity-expected-to-exist-error natural-key-list validated-entity)
-            (= command :command/delete) (entity-expected-to-exist-error natural-key-list validated-entity)))))
+            (= command :command/look-up) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]
+            (= command :command/update) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]
+            (= command :command/delete) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]))))
 
 
 (defn process
@@ -215,7 +215,7 @@
   ([db schema-type command-map default-command entity]
    (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
          process-func (fn [db schema entity]
-                        (apply-command command-map default-command db schema entity))]
+                        (apply-command command-map default-command {} db schema entity))]
      (validate-entity db schema entity process-func))))
 
 

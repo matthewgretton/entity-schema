@@ -94,7 +94,6 @@
 ;;Let's take a looka the full entity-schema for the funding cicle with joins
 (es/pull-schema-by-type schema-with-joins-db :entity.schema.type/funding-channel)
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Nested validation example
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -128,5 +127,5 @@
 @(d/transact conn [tx])
 
 (p/process (d/db conn) :entity.schema.type/funding-channel
-           {} :command/look-up
+           {} :command/insert
            full-fc-entity)
