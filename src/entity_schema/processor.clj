@@ -116,50 +116,57 @@
 
 (declare validate-entity)
 
-(defn validate-field [db entity-schema field entity f]
+(defn validate-field [db entity-schema field entity res f]
   (let [{nullable?                               :field/nullable?
          {field-ident             :db/ident
           {cardinality :db/ident} :db/cardinality
           {valueType :db/ident}   :db/valueType} :field/schema} field
         {{schema-type-id :db/ident} :entity.schema/type} entity-schema
-        validated-value (if (contains? entity field-ident)
-                          (let [val (get entity field-ident)
-                                validated-vals (->> (to-coll-not-map val) ;if val is a single value put into a collection
-                                                    (map (fn [v]
-                                                           (let [type-checked-val (validate-type valueType v)]
-                                                             (if (or (error? type-checked-val) (not= valueType :db.type/ref))
-                                                               type-checked-val
-                                                               (let [entity (expand-ref db schema-type-id type-checked-val)]
-                                                                 (if (error? entity)
-                                                                   entity
-                                                                   (let [schema (es/derive-schema db field entity)]
-                                                                     (validate-entity db schema entity f))))))))
-                                                    (into #{}))]
-                            (if (= cardinality :db.cardinality/many)
-                              validated-vals
-                              (if (coll-not-map? val)
-                                (incompatible-cardinality-error field-ident val)
-                                (first validated-vals))))
-                          (if (not nullable?)
-                            (not-nullable-error schema-type-id field-ident)))]
-    [field-ident validated-value]))
+        [validated-value new-res] (if (contains? entity field-ident)
+                                    (let [val (get entity field-ident)
+                                          [validated-vals new-res]
+                                          (->> (to-coll-not-map val) ;if val is a single value put into a collection
+                                               (reduce (fn [[es r] v]
+                                                         (let [type-checked-val (validate-type valueType v)]
+                                                           (if (or (error? type-checked-val) (not= valueType :db.type/ref))
+                                                             [(conj es type-checked-val) r]
+                                                             (let [entity (expand-ref db schema-type-id type-checked-val)]
+                                                               (if (error? entity)
+                                                                 [(conj es entity) r]
+                                                                 (let [schema (es/derive-schema db field entity)
+                                                                       [e new-r] (validate-entity db schema entity r f)]
+                                                                   [(conj es e) new-r]))))))
+                                                       [#{} res]))]
+                                      (if (= cardinality :db.cardinality/many)
+                                        [validated-vals new-res]
+                                        (if (coll-not-map? val)
+                                          [(incompatible-cardinality-error field-ident val) res]
+                                          [(first validated-vals) res])))
+                                    (if (not nullable?)
+                                      [(not-nullable-error schema-type-id field-ident) res]))]
+    [field-ident validated-value new-res]))
 
 
 
 (defn validate-entity
-  [db {:keys [:entity.schema/fields] :as schema} entity process-func]
+  [db {:keys [:entity.schema/fields] :as schema} entity res xf]
   (assert (not (nil? fields)))
-  (->> fields
-       (map #(validate-field db schema % entity process-func))
-       (filter (comp not nil? second))
-       (into {})
-       (process-func db schema)))
+  (let [[ent new-r]
+        (reduce (fn [[m r] field]
+                  (let [[f-id v new-r] (validate-field db schema field r entity xf)
+                        new-m (if (nil? v) m (assoc m f-id v))]
+                    [new-m new-r]))
+                [{} res]
+                fields)]
+    (xf db schema new-r ent)))
 
 
 ;;process funcs
 
-(defn identity-process-func [db schema validated-entity]
-  validated-entity)
+(defn identity-process-func
+  ([] nil)
+  ([db schema res validated-entity]
+   validated-entity))
 
 
 
@@ -172,58 +179,59 @@
      (partial merge-with (fn [l _] l))
      left right)))
 
-(defn apply-command [command-map default-command run-state
+(defn apply-command
+  ([command-map default-command
 
-                     db
-                     {:keys [:db/ident
-                             :entity.schema/natural-key
-                             :entity.schema/part]}
-                     validated-entity
-                     ]
-  (assert-result-valid validated-entity)
-  (assert (not (nil? command-map)))
-  (assert (not (nil? default-command)))
-  (let [natural-key-list (->> natural-key (map :db/ident) (into []))
-        command (get command-map ident default-command)
-        natural-key-vals (->> natural-key-list
-                              (map #(get validated-entity %))
-                              (into #{})
-                              )]
-    (if-let [id (dh/look-up-entity-by-natural-key db natural-key-list validated-entity)]
-      ;;entity already exists
-      [(cond (= command :command/insert) (entity-not-expected-to-exist-error natural-key-list validated-entity)
-             (= command :command/upsert) (assoc validated-entity :db/id id)
-             (= command :command/look-up) (assoc validated-entity :db/id id)
-             (= command :command/update) (assert false "Update not implemented yet")
-             (= command :command/delete) (assert false "Delete not implemented yet")) run-state]
-      ;; entity does not exist
-      (cond (= command :command/insert) (if-let [id (get-in run-state [ident natural-key-vals])]
-                                          [(assoc validated-entity :db/id id) run-state]
-                                          (let [new-id (d/tempid (:db/ident part))]
-                                            [(assoc validated-entity :db/id new-id) (combine run-state ident natural-key-vals new-id)]))
-            (= command :command/upsert) (if-let [id (get-in run-state [ident natural-key-vals])]
-                                          [(assoc validated-entity :db/id id) run-state]
-                                          (let [new-id (d/tempid (:db/ident part))]
-                                            [(assoc validated-entity :db/id new-id) (combine run-state ident natural-key-vals new-id)]))
-            (= command :command/look-up) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]
-            (= command :command/update) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]
-            (= command :command/delete) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]))))
-
+    db
+    {:keys [:db/ident
+            :entity.schema/natural-key
+            :entity.schema/part]}
+    run-state
+    validated-entity
+    ]
+   (assert-result-valid validated-entity)
+   (assert (not (nil? command-map)))
+   (assert (not (nil? default-command)))
+   (let [natural-key-list (->> natural-key (map :db/ident) (into []))
+         command (get command-map ident default-command)
+         natural-key-vals (->> natural-key-list
+                               (map #(get validated-entity %))
+                               (into #{})
+                               )]
+     (if-let [id (dh/look-up-entity-by-natural-key db natural-key-list validated-entity)]
+       ;;entity already exists
+       [(cond (= command :command/insert) (entity-not-expected-to-exist-error natural-key-list validated-entity)
+              (= command :command/upsert) (assoc validated-entity :db/id id)
+              (= command :command/look-up) (assoc validated-entity :db/id id)
+              (= command :command/update) (assert false "Update not implemented yet")
+              (= command :command/delete) (assert false "Delete not implemented yet")) run-state]
+       ;; entity does not exist
+       (cond (= command :command/insert) (if-let [id (get-in run-state [ident natural-key-vals])]
+                                           [(assoc validated-entity :db/id id) run-state]
+                                           (let [new-id (d/tempid (:db/ident part))]
+                                             [(assoc validated-entity :db/id new-id) (combine run-state ident natural-key-vals new-id)]))
+             (= command :command/upsert) (if-let [id (get-in run-state [ident natural-key-vals])]
+                                           [(assoc validated-entity :db/id id) run-state]
+                                           (let [new-id (d/tempid (:db/ident part))]
+                                             [(assoc validated-entity :db/id new-id) (combine run-state ident natural-key-vals new-id)]))
+             (= command :command/look-up) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]
+             (= command :command/update) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]
+             (= command :command/delete) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]))))
+  )
 
 (defn process
   "returns a structurally similar version of the entity with error information"
   ([db schema-type command-map default-command entity]
    (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
-         process-func (fn [db schema entity]
-                        (apply-command command-map default-command {} db schema entity))]
-     (validate-entity db schema entity process-func))))
+         process-func (partial apply-command command-map default-command)]
+     (validate-entity db schema entity {} process-func))))
 
 
 (defn validate
   "returns a structurally similar version of the entity with error information"
   ([db schema-type entity]
    (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)]
-     (validate-entity db schema entity identity-process-func))))
+     (validate-entity db schema entity nil identity-process-func))))
 
 
 (defn assert-valid
