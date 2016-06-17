@@ -173,81 +173,19 @@
 
 
 (defn combine-id-cache
-  ([left schema-ident natural-key id]
-   (combine-id-cache left {schema-ident {natural-key id}}))
+  ([run-state schema-ident natural-key id]
+   (combine-id-cache run-state {schema-ident {natural-key id}}))
   ([left right]
    (merge-with
      (partial merge-with (fn [l _] l))
      left right)))
 
 
-;;TODO there is something weird here when you pass in a cat coll
-(defn replace-id [map es]
-  (clojure.walk/postwalk (fn [x]
-                           (if (and (coll? x) (= (first x) :db/id) (contains? map (second x)))
-                             [:db/id (get map (second x))]
-                             x)) (if (instance? clojure.core.reducers.Cat es)
-                                                            (into [] es)
-                                                            es)))
-
-
-
-(instance? clojure.core.reducers.Cat (r/cat [1 2 3] [1 2 3]))
-
-(defn key-set [m]
-  (into #{} (keys m)))
-
-(defn intersecting-keys [l r]
-  (clojure.set/intersection (key-set l) (key-set r)))
-
-(defn intersect-with [f l r]
-  (->> (intersecting-keys l r)
-       (map (fn [k] [k (f (get l k) (get r k))]))
-       (into {})))
-
-(defn cache-intersection [l-cache r-cache]
-  (->> (intersect-with (fn [l-map r-map]
-                         (intersect-with (fn [l _] (d/tempid (:part l))) l-map r-map)) l-cache r-cache)
-       (filter (fn [[k v]]
-                 (not (empty? v))))
-       (into {})))
-
-
-(defn merge-cache [& maps]
-  (apply merge-with (cons (fn [l r] (merge l r)) maps)))
-
-(require 'spyscope.core)
-
-(defn combine-result
-  "Combine the results from two parrallel runs"
-  ([] [[] {}])
-  ([[l-es l-cache] [r-es r-cache]]
-   (let [cache-intersect (cache-intersection l-cache r-cache)
-         merged (merge-cache l-cache r-cache cache-intersect)
-         [l-id-map r-id-map]  (->> cache-intersect
-                                         (mapcat (fn [[e m]]
-                                                   (->> m
-                                                        (map (fn [[k v]]
-                                                               [(get-in l-cache [e k]) (get-in r-cache [e k]) v]))
-                                                        (filter (fn [[a b _]]
-                                                                  (and (not (nil? a)) (not (nil? b))))))))
-                                         (reduce (fn [[l-map r-map] [l-id r-id new-id]]
-                                                   [(assoc l-map l-id new-id) (assoc r-map r-id new-id)]) [{} {}]))
-         transformed-l-es (replace-id l-id-map l-es)
-         transformed-r-es (replace-id  r-id-map  r-es)]
-     [(r/cat transformed-l-es transformed-r-es) merged])))
-
 
 (defn apply-command
-  ([command-map default-command
-
-    db
-    {:keys [:db/ident
+  ([command-map default-command db {:keys [:db/ident
             :entity.schema/natural-key
-            :entity.schema/part]}
-    run-state
-    validated-entity
-    ]
+            :entity.schema/part]} run-state validated-entity]
    (assert-result-valid validated-entity)
    (assert (not (nil? command-map)))
    (assert (not (nil? default-command)))
@@ -278,23 +216,8 @@
              (= command :command/delete) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]))))
   )
 
-(defn process
-  "returns a structurally similar version of the entity with error information"
-  ([db schema-type command-map default-command entity]
-   (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
-         process-func (partial apply-command command-map default-command)]
-     (first (validate-entity db schema entity {} process-func)))))
 
-(defn process-all [db schema-type command-map default-command entities]
-  (let [process-func (partial apply-command command-map default-command)]
-    (->> entities
-         (r/fold 1 combine-result
-                 (fn [[es r] entity]
-                   (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
-                         [e new-r] (validate-entity db schema entity r process-func)]
-                     [(conj es e) new-r]
-                     )))
-         (first))))
+
 
 (defn validate
   "returns a structurally similar version of the entity with error information"
@@ -307,6 +230,85 @@
   ([db schema-type entity]
    (let [validation (validate db schema-type entity)]
      (assert-result-valid validation))))
+
+
+
+(defn process
+  "returns a structurally similar version of the entity with error information"
+  ([db schema-type command-map default-command entity]
+   (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
+         process-func (partial apply-command command-map default-command)]
+     (first (validate-entity db schema entity {} process-func)))))
+
+
+(defn replace-id [map es]
+  (clojure.walk/postwalk (fn [x]
+                           (if (and (coll? x) (= (first x) :db/id) (contains? map (second x)))
+                             [:db/id (get map (second x))]
+                             x)) es))
+
+
+(defn key-set [m]
+  (into #{} (keys m)))
+
+(defn intersecting-keys [l r]
+  (clojure.set/intersection (key-set l) (key-set r)))
+
+(defn intersect-with [f l r]
+  (->> (intersecting-keys l r)
+       (map (fn [k] [k (f (get l k) (get r k))]))
+       (into {})))
+
+(defn intersect-cache [l-cache r-cache]
+  (->> (intersect-with (fn [l-map r-map]
+                         (intersect-with (fn [l _] (d/tempid (:part l))) l-map r-map)) l-cache r-cache)
+       (filter (comp not empty? second))
+       (into {})))
+
+
+(defn merge-cache [& maps]
+  (apply merge-with (cons (fn [l r] (merge l r)) maps)))
+
+
+(defn combine-result
+  "Combine the results from two parrallel runs"
+  ([] [[] {}])
+  ([[l-es l-cache] [r-es r-cache]]
+   (let [cache-intersect (intersect-cache l-cache r-cache)
+         merged (merge-cache l-cache r-cache cache-intersect)
+         [l-id-map r-id-map] (->> cache-intersect
+                                  (mapcat (fn [[e m]]
+                                            (->> m
+                                                 (map (fn [[k new-id]]
+                                                        (let [[l-id r-id] (->> [l-cache r-cache]
+                                                                               (map #(get-in % [e k])))]
+                                                          [l-id r-id new-id])))
+                                                 (filter (fn [[a b _]]
+                                                           (and (not (nil? a)) (not (nil? b))))))))
+                                  (reduce
+                                    (fn [[l-map r-map] [l-id r-id new-id]]
+                                      [(assoc l-map l-id new-id) (assoc r-map r-id new-id)])
+                                    [{} {}]))
+
+         [transformed-l-es transformed-r-es] (->> [[l-id-map l-es] [r-id-map r-es]]
+                                                  (map (fn [[map es]]
+                                                         (->> (if (instance? clojure.core.reducers.Cat es)
+                                                                (into [] es)
+                                                                es)
+                                                              (replace-id map)))))
+         ]
+     [(r/cat transformed-l-es transformed-r-es) merged])))
+
+(defn process-all [db schema-type command-map default-command entities]
+  (let [process-func (partial apply-command command-map default-command)]
+    (->> entities
+         (r/fold 1 combine-result
+                 (fn [[es r] entity]
+                   (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
+                         [e new-r] (validate-entity db schema entity r process-func)]
+                     [(conj es e) new-r]
+                     )))
+         (first))))
 
 
 
