@@ -4,7 +4,8 @@
             [entity-schema.datomic-helper :as dh]
             [entity-schema.entity-schema :as es]
             [entity-schema.validation :as v]
-            [entity-schema.processor :as p])
+            [entity-schema.processor :as p]
+            [clojure.core.reducers :as r])
   (:import (java.util UUID Date)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -40,7 +41,6 @@
 ;; note that datomc fields must have been transacted before they are referrd to.
 ;; Hence, fields transacted before entity schema
 @(d/transact conn [fc-schema-tx])
-
 
 
 
@@ -120,12 +120,29 @@
                                                     :eligibility-criterion/criterion-value     "#{false}"}}})
 
 
+(def ent2
+  (assoc full-fc-entity :funding-channel/uuid (UUID/randomUUID)))
+
 (def tx (p/validate schema-with-joins-db
-                   :entity.schema.type/funding-channel
-                   full-fc-entity))
+                    :entity.schema.type/funding-channel
+                    full-fc-entity))
 
 @(d/transact conn [tx])
 
 (p/process (d/db conn) :entity.schema.type/funding-channel
            {} :command/insert
            full-fc-entity)
+
+
+
+
+;;Can we make the combine method associtive?????
+(->> (p/process-all (d/db conn) :entity.schema.type/funding-channel
+                    {} :command/insert
+                    [full-fc-entity
+                     ent2
+                     full-fc-entity])
+     (into []))
+
+
+

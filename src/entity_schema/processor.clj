@@ -1,7 +1,8 @@
 (ns entity-schema.processor
   (:require [entity-schema.entity-schema :as es]
             [datomic.api :as d]
-            [entity-schema.datomic-helper :as dh])
+            [entity-schema.datomic-helper :as dh]
+            [clojure.core.reducers :as r])
   (:import (java.net URI)
            (java.util UUID Date Map)
            (clojure.lang Keyword)))
@@ -153,7 +154,7 @@
   (assert (not (nil? fields)))
   (let [[ent new-r]
         (reduce (fn [[m r] field]
-                  (let [[f-id v new-r] (validate-field db schema field r entity xf)
+                  (let [[f-id v new-r] (validate-field db schema field entity r xf)
                         new-m (if (nil? v) m (assoc m f-id v))]
                     [new-m new-r]))
                 [{} res]
@@ -166,18 +167,76 @@
 (defn identity-process-func
   ([] nil)
   ([db schema res validated-entity]
-   validated-entity))
+   [validated-entity res]))
 
 
 
 
-(defn combine
+(defn combine-id-cache
   ([left schema-ident natural-key id]
-   (combine left {schema-ident {natural-key id}}))
+   (combine-id-cache left {schema-ident {natural-key id}}))
   ([left right]
    (merge-with
      (partial merge-with (fn [l _] l))
      left right)))
+
+
+;;TODO there is something weird here when you pass in a cat coll
+(defn replace-id [map es]
+  (clojure.walk/postwalk (fn [x]
+                           (if (and (coll? x) (= (first x) :db/id) (contains? map (second x)))
+                             [:db/id (get map (second x))]
+                             x)) (if (instance? clojure.core.reducers.Cat es)
+                                                            (into [] es)
+                                                            es)))
+
+
+
+(instance? clojure.core.reducers.Cat (r/cat [1 2 3] [1 2 3]))
+
+(defn key-set [m]
+  (into #{} (keys m)))
+
+(defn intersecting-keys [l r]
+  (clojure.set/intersection (key-set l) (key-set r)))
+
+(defn intersect-with [f l r]
+  (->> (intersecting-keys l r)
+       (map (fn [k] [k (f (get l k) (get r k))]))
+       (into {})))
+
+(defn cache-intersection [l-cache r-cache]
+  (->> (intersect-with (fn [l-map r-map]
+                         (intersect-with (fn [l _] (d/tempid (:part l))) l-map r-map)) l-cache r-cache)
+       (filter (fn [[k v]]
+                 (not (empty? v))))
+       (into {})))
+
+
+(defn merge-cache [& maps]
+  (apply merge-with (cons (fn [l r] (merge l r)) maps)))
+
+(require 'spyscope.core)
+
+(defn combine-result
+  "Combine the results from two parrallel runs"
+  ([] [[] {}])
+  ([[l-es l-cache] [r-es r-cache]]
+   (let [cache-intersect (cache-intersection l-cache r-cache)
+         merged (merge-cache l-cache r-cache cache-intersect)
+         [l-id-map r-id-map]  (->> cache-intersect
+                                         (mapcat (fn [[e m]]
+                                                   (->> m
+                                                        (map (fn [[k v]]
+                                                               [(get-in l-cache [e k]) (get-in r-cache [e k]) v]))
+                                                        (filter (fn [[a b _]]
+                                                                  (and (not (nil? a)) (not (nil? b))))))))
+                                         (reduce (fn [[l-map r-map] [l-id r-id new-id]]
+                                                   [(assoc l-map l-id new-id) (assoc r-map r-id new-id)]) [{} {}]))
+         transformed-l-es (replace-id l-id-map l-es)
+         transformed-r-es (replace-id  r-id-map  r-es)]
+     [(r/cat transformed-l-es transformed-r-es) merged])))
+
 
 (defn apply-command
   ([command-map default-command
@@ -209,11 +268,11 @@
        (cond (= command :command/insert) (if-let [id (get-in run-state [ident natural-key-vals])]
                                            [(assoc validated-entity :db/id id) run-state]
                                            (let [new-id (d/tempid (:db/ident part))]
-                                             [(assoc validated-entity :db/id new-id) (combine run-state ident natural-key-vals new-id)]))
+                                             [(assoc validated-entity :db/id new-id) (combine-id-cache run-state ident natural-key-vals new-id)]))
              (= command :command/upsert) (if-let [id (get-in run-state [ident natural-key-vals])]
                                            [(assoc validated-entity :db/id id) run-state]
                                            (let [new-id (d/tempid (:db/ident part))]
-                                             [(assoc validated-entity :db/id new-id) (combine run-state ident natural-key-vals new-id)]))
+                                             [(assoc validated-entity :db/id new-id) (combine-id-cache run-state ident natural-key-vals new-id)]))
              (= command :command/look-up) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]
              (= command :command/update) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]
              (= command :command/delete) [(entity-expected-to-exist-error natural-key-list validated-entity) run-state]))))
@@ -224,14 +283,24 @@
   ([db schema-type command-map default-command entity]
    (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
          process-func (partial apply-command command-map default-command)]
-     (validate-entity db schema entity {} process-func))))
+     (first (validate-entity db schema entity {} process-func)))))
 
+(defn process-all [db schema-type command-map default-command entities]
+  (let [process-func (partial apply-command command-map default-command)]
+    (->> entities
+         (r/fold 1 combine-result
+                 (fn [[es r] entity]
+                   (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
+                         [e new-r] (validate-entity db schema entity r process-func)]
+                     [(conj es e) new-r]
+                     )))
+         (first))))
 
 (defn validate
   "returns a structurally similar version of the entity with error information"
   ([db schema-type entity]
    (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)]
-     (validate-entity db schema entity nil identity-process-func))))
+     (first (validate-entity db schema entity nil identity-process-func)))))
 
 
 (defn assert-valid
@@ -240,26 +309,7 @@
      (assert-result-valid validation))))
 
 
-(def left
-  {:entity.schema/blah1 {#{1 2} 1
-                         #{1 3} 2}
-   :entity.schema/blah2 {#{1 3} 1}})
 
-(def right
-  {:entity.schema/blah1 {#{1 2} 11
-                         #{1 4} 22}
-   :entity.schema/blah2 {#{1 4} 4}})
-
-(def expect
-  {:entity.schema/blah1 {#{1 2} 1
-                         #{1 3} 2
-                         #{1 4} 22}
-   :entity.schema/blah2 {#{1 3} 1
-                         #{1 4} 4}})
-
-
-
-(assert (= (combine left right) expect))
 
 
 
