@@ -102,7 +102,6 @@
 ;; example entity and try to validate it.
 
 
-
 ;; An example of a funding channel entity with eligibility criterions and concentration limits
 (def full-fc-entity
   {:entity/instant                               (Date.)
