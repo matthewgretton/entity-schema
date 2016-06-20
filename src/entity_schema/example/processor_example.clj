@@ -122,11 +122,9 @@
 (def ent2
   (assoc full-fc-entity :funding-channel/uuid (UUID/randomUUID)))
 
-(def tx (p/validate schema-with-joins-db
-                    :entity.schema.type/funding-channel
-                    full-fc-entity))
 
-@(d/transact conn [tx])
+
+
 
 (p/process (d/db conn) :entity.schema.type/funding-channel
            {} :command/insert
