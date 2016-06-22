@@ -23,8 +23,13 @@
                               :imports  ~(:imports attr-map)
                               :code     '(do ~@body)}))))
 
-
+;TODO add in a check that there is at least one item in the entity
 (defn build-query-map [db natural-key entity]
+  (assert (some (fn [k] (contains? entity k)) natural-key) (str "There needs to be at least of the natural keys in the map" "\n"
+
+                                                                "natural-key:" "\n" (with-out-str (clojure.pprint/pprint natural-key)) "\n"
+
+                                                                "entity:" "\n" (with-out-str (clojure.pprint/pprint entity))))
   (let [ent-sym '?e
         [where in args] (->> (map vector natural-key (range (count natural-key)))
                              (reduce
