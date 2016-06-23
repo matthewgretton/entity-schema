@@ -117,19 +117,34 @@
 
 (declare validate-entity)
 
-(defn nullable-field? [command {:keys [:entity.schema/natural-key]}
-                       {{field-ident :db/ident} :field/schema
-                        nullable?               :field/nullable?}]
-  (cond (contains? #{:command/look-up :command/update} command)
-        (or nullable? (contains? (->> natural-key
-                                      :db/ident
-                                      (into #{})) field-ident))
-        :else nullable?))
+(defn get-key-set [{:keys [:entity.schema/natural-key]}]
+  (->> natural-key (map :db/ident) (into #{})))
 
-(defn validate-field [db entity-schema field command-map default-command entity run-state]
+;; In the first instance where we are only looking up the unq keys:
+;; Then we need to check only nullablity of fields
+;;
+;; :insert (standard nullablity check)
+;; :upsert (standard nullablity check)
+;; :update (standard nullablity check)
+;; :look-up (standard nullablity check)
+
+;; In the second instance we transfrom upsert to one of insert or update dependent on whether it exists or not
+;;
+;; :insert (standard-nulliblity check)
+;; :update (no nullibility checks)
+;; :look-up (no nullbility checks)
+
+(defn nullable-field? [ignore-nulliblity?
+                       {nullable? :field/nullable?}]
+  (if ignore-nulliblity?
+    true
+    nullable?))
+
+(defn validate-field [db entity-schema field ignore-nulliblity? command-map default-command entity run-state]
   (let [{{field-ident             :db/ident
           {cardinality :db/ident} :db/cardinality
-          {value-type :db/ident}  :db/valueType} :field/schema} field
+          {value-type :db/ident}  :db/valueType} :field/schema
+         nullable?                               :field/nullable?} field
         {{schema-type-id :db/ident} :entity.schema/type} entity-schema
         [validated-value new-run-state]
         (if (contains? entity field-ident)
@@ -156,9 +171,7 @@
               (if (coll-not-map? value)
                 [(incompatible-cardinality-error field-ident value) run-state]
                 [(first validated-values) run-state])))
-          (if (not
-                (-> (get command-map field-ident default-command)
-                    (nullable-field? entity-schema field)))
+          (if (not (or ignore-nulliblity? nullable?))
             [(not-nullable-error schema-type-id field-ident) run-state]))]
     [field-ident validated-value new-run-state]))
 
@@ -191,21 +204,17 @@
              [false (entity-expected-to-exist-error natural-key-list validated-entity) run-state])))))
 
 (defn split-fields [fields natural-key-set]
-  (let [{key-fields true non-key-fields false}
-        (->> fields
-             (group-by (fn [{{field-id :db/ident} :field/schema}]
-                         (contains? natural-key-set field-id))))]
+  (let [grouped-fields (->> fields
+                            (group-by (fn [{{field-id :db/ident} :field/schema}]
+                                        (contains? natural-key-set field-id))))
+        key-fields (get grouped-fields true [])
+        non-key-fields (get grouped-fields false [])]
     [key-fields non-key-fields]))
 
-
-(defn get-key-set [{:keys [:entity.schema/natural-key]}]
-  (->> natural-key (map :db/ident) (into #{})))
-
-
-(defn process-fields [db schema command-map default-command entity run-state fields]
+(defn process-fields [db schema command command-map default-command entity run-state fields]
   (reduce (fn [[current-entity current-run-state] field]
-            (let [[field-id value updated-run-state]
-                  (validate-field db schema field command-map default-command entity current-run-state)
+            (let [[field-id value updated-run-state] (validate-field db schema field command command-map default-command
+                                                                     entity current-run-state)
                   updated-entity (if (nil? value)
                                    current-entity
                                    (assoc current-entity field-id value))]
@@ -214,39 +223,28 @@
           fields))
 
 
+(defn ignore-nulliblity? [exists? command]
+  (and (contains? #{:command/update :command/look-up} command) exists?))
+
+
 (defn validate-entity
-  [db {:keys [:db/ident
-              :entity.schema/fields] :as schema} command-map default-command entity run-state]
+  [db {:keys [:db/ident :entity.schema/fields] :as schema} command-map default-command entity run-state]
   (assert (not (nil? fields)))
   (let [command (get command-map ident default-command)
         natural-key-set (get-key-set schema)
         [key-fields non-key-fields] (split-fields fields natural-key-set)
 
-        [key-field-entity key-field-run-state] (process-fields db schema command-map default-command
+        [key-field-entity key-field-run-state] (process-fields db schema false command-map default-command
                                                                entity run-state key-fields)
-
-
         [exists? upd-key-field-entity upd-key-field-run-state] (apply-command db schema command
                                                                               key-field-entity key-field-run-state)
+        ignore-nulliblity? (ignore-nulliblity? exists? command)
 
-        new-command (if (= command :command/upsert)
-                      (if exists? :command/update :command/insert)
-                      command)
-
-        new-default-command (if (= default-command :command/upsert)
-                              (if exists? :command/update :command/insert)
-                              default-command)
-
-        new-command-map (assoc command-map ident new-command)
-
-        [_ non-key-field-entity non-key-run-state] (process-fields db schema new-command-map new-default-command
-                                                                   entity upd-key-field-run-state non-key-fields)
-
-        ]
-
-    [(merge upd-key-field-entity non-key-field-entity) non-key-run-state]
-    ;[key-field-entity key-field-run-state]
-    ))
+        [non-key-field-entity non-key-run-state] (process-fields db schema
+                                                                 ignore-nulliblity?
+                                                                 command-map default-command
+                                                                 entity upd-key-field-run-state non-key-fields)]
+    [(merge upd-key-field-entity non-key-field-entity) non-key-run-state]))
 
 (defn process
   "returns a structurally similar version of the entity with error information"
