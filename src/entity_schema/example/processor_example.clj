@@ -123,91 +123,6 @@
   (assoc full-fc-entity :funding-channel/uuid (UUID/randomUUID)))
 
 
-(p/process-fields
-  (d/db conn)
-  {:db/ident :entity.schema/funding-channel,
-   :entity.schema/type {:db/ident :entity.schema.type/funding-channel},
-   :entity.schema/part {:db/ident :db.part/entity},
-   :entity.schema/fields
-   [{:field/schema
-                      {:db/ident :funding-channel/allocation-percentage,
-                       :db/cardinality {:db/ident :db.cardinality/one},
-                       :db/valueType {:db/ident :db.type/bigdec}},
-     :field/nullable? false}
-    {:field/schema
-                      {:db/ident :funding-channel/scale-allocation-percentage?,
-                       :db/cardinality {:db/ident :db.cardinality/one},
-                       :db/valueType {:db/ident :db.type/boolean}},
-     :field/nullable? false}
-    {:field/schema
-                      {:db/ident :funding-channel/uuid,
-                       :db/cardinality {:db/ident :db.cardinality/one},
-                       :db/valueType {:db/ident :db.type/uuid}},
-     :field/nullable? false}
-    {:field/schema
-                      {:db/ident :funding-channel/referral-only?,
-                       :db/cardinality {:db/ident :db.cardinality/one},
-                       :db/valueType {:db/ident :db.type/boolean}},
-     :field/nullable? false}
-    {:field/schema
-                      {:db/ident :funding-channel/name,
-                       :db/cardinality {:db/ident :db.cardinality/one},
-                       :db/valueType {:db/ident :db.type/string}},
-     :field/nullable? false}
-    {:field/schema
-                      {:db/ident :funding-channel/eligibility-criterions,
-                       :db/cardinality {:db/ident :db.cardinality/many},
-                       :db/valueType {:db/ident :db.type/ref}},
-     :field/entity-schema-type
-                      {:db/ident :entity.schema.type/eligibility-criterion},
-     :field/nullable? false}],
-   :entity.schema/natural-key [{:db/ident :funding-channel/uuid}]}
-  {:entity.schema/funding-channel :command/insert}
-  :command/insert
-  {:entity/instant #inst "2016-06-22T20:58:12.521-00:00",
-   :funding-channel/uuid #uuid "879fd0ef-15b4-41fe-8072-ad372fe62d76",
-   :funding-channel/name "Dorset Rise Ltd",
-   :funding-channel/referral-only? false,
-   :funding-channel/scale-allocation-percentage? true,
-   :funding-channel/allocation-percentage 0.7M,
-   :funding-channel/eligibility-criterions
-   #{{:eligibility-criterion/criterion-type "Include",
-      :eligibility-criterion/criterion-attribute ":risk-band",
-      :eligibility-criterion/criterion-value "#{:Aplus :A :B :C :D}"}
-     {:eligibility-criterion/criterion-type "Include",
-      :eligibility-criterion/criterion-attribute ":secured",
-      :eligibility-criterion/criterion-value "#{false}"}}}
-  {:entity.schema/funding-channel
-   {#{#uuid "879fd0ef-15b4-41fe-8072-ad372fe62d76"}
-    {:part :db.part/entity, :idx -1000077}}}
-  [{:field/schema
-                     {:db/ident :funding-channel/allocation-percentage,
-                      :db/cardinality {:db/ident :db.cardinality/one},
-                      :db/valueType {:db/ident :db.type/bigdec}},
-    :field/nullable? false}
-   {:field/schema
-                     {:db/ident :funding-channel/scale-allocation-percentage?,
-                      :db/cardinality {:db/ident :db.cardinality/one},
-                      :db/valueType {:db/ident :db.type/boolean}},
-    :field/nullable? false}
-   {:field/schema
-                     {:db/ident :funding-channel/referral-only?,
-                      :db/cardinality {:db/ident :db.cardinality/one},
-                      :db/valueType {:db/ident :db.type/boolean}},
-    :field/nullable? false}
-   {:field/schema
-                     {:db/ident :funding-channel/name,
-                      :db/cardinality {:db/ident :db.cardinality/one},
-                      :db/valueType {:db/ident :db.type/string}},
-    :field/nullable? false}
-   {:field/schema
-                     {:db/ident :funding-channel/eligibility-criterions,
-                      :db/cardinality {:db/ident :db.cardinality/many},
-                      :db/valueType {:db/ident :db.type/ref}},
-    :field/entity-schema-type
-                     {:db/ident :entity.schema.type/eligibility-criterion},
-    :field/nullable? false}])
-
 (p/process (d/db conn) :entity.schema.type/funding-channel
            {} :command/insert
            full-fc-entity)
@@ -216,13 +131,28 @@
 
 
 ;;Can we make the combine method associtive?????
-(->> (p/process-all (d/db conn) :entity.schema.type/funding-channel
+(def entities (->> (p/process-all (d/db conn) :entity.schema.type/funding-channel
                     {} :command/insert
                     [full-fc-entity
                      ent2
+                     ent2
                      full-fc-entity
                      ])
-     (into []))
+     (into [])))
+
+@(d/transact conn entities)
+
+
+(def entities2 (->> (p/process-all (d/db conn) :entity.schema.type/funding-channel
+                                  {} :command/update
+                                  [full-fc-entity
+                                   ent2
+                                   ent2
+                                   full-fc-entity
+                                   ])
+                   (into [])))
+
+@(d/transact conn entities2)
 
 
 

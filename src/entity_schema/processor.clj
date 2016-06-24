@@ -181,27 +181,33 @@
     (partial merge-with (fn [l _] l))
     run-state {schema-ident {natural-key id}}))
 
+(defn ignore-nulliblity? [exists? command]
+  (and (contains? #{:command/update :command/look-up} command) exists?))
+
 (defn apply-command
   ([db {:keys [:db/ident :entity.schema/natural-key :entity.schema/part]} command validated-entity run-state]
    (assert-result-valid validated-entity)
    (let [natural-key-list (->> natural-key (map :db/ident) (into []))
          natural-key-set (->> natural-key-list
                               (map #(get validated-entity %))
-                              (into #{}))]
-     (if-let [id (dh/look-up-entity-by-natural-key db natural-key-list validated-entity)]
-       ;;entity already exists
-       [true (cond (= command :command/insert) (entity-not-expected-to-exist-error natural-key-list validated-entity)
-                   (contains? #{:command/update :command/upsert} command)
-                   (assoc validated-entity :db/id id)
-                   (= command :command/look-up) {:db/ident id}) run-state]
-       ;; entity does not exist
-       (cond (contains? #{:command/insert :command/upsert} command)
-             (if-let [id (get-in run-state [ident natural-key-set])]
-               [false (assoc validated-entity :db/id id) run-state]
-               (let [new-id (d/tempid (:db/ident part))]
-                 [false (assoc validated-entity :db/id new-id) (update-run-state run-state ident natural-key-set new-id)]))
-             (contains? #{:command/look-up :command/update} command)
-             [false (entity-expected-to-exist-error natural-key-list validated-entity) run-state])))))
+                              (into #{}))
+         [exists? upd-entity upd-run-state]
+         (if-let [id (dh/look-up-entity-by-natural-key db natural-key-list validated-entity)]
+           ;;entity already exists
+           [true (cond (= command :command/insert) (entity-not-expected-to-exist-error natural-key-list validated-entity)
+                       (contains? #{:command/update :command/upsert} command)
+                       (assoc validated-entity :db/id id)
+                       (= command :command/look-up) {:db/ident id}) run-state]
+           ;; entity does not exist
+           (cond (contains? #{:command/insert :command/upsert} command)
+                 (if-let [id (get-in run-state [ident natural-key-set])]
+                   [false (assoc validated-entity :db/id id) run-state]
+                   (let [new-id (d/tempid (:db/ident part))]
+                     [false (assoc validated-entity :db/id new-id) (update-run-state run-state ident natural-key-set new-id)]))
+                 (contains? #{:command/look-up :command/update} command)
+                 [false (entity-expected-to-exist-error natural-key-list validated-entity) run-state]))]
+
+     [(ignore-nulliblity? exists? command) upd-entity upd-run-state])))
 
 (defn split-fields [fields natural-key-set]
   (let [grouped-fields (->> fields
@@ -222,29 +228,28 @@
           [{} run-state]
           fields))
 
-
-(defn ignore-nulliblity? [exists? command]
-  (and (contains? #{:command/update :command/look-up} command) exists?))
-
-
 (defn validate-entity
   [db {:keys [:db/ident :entity.schema/fields] :as schema} command-map default-command entity run-state]
   (assert (not (nil? fields)))
   (let [command (get command-map ident default-command)
         natural-key-set (get-key-set schema)
         [key-fields non-key-fields] (split-fields fields natural-key-set)
-
         [key-field-entity key-field-run-state] (process-fields db schema false command-map default-command
-                                                               entity run-state key-fields)
-        [exists? upd-key-field-entity upd-key-field-run-state] (apply-command db schema command
-                                                                              key-field-entity key-field-run-state)
-        ignore-nulliblity? (ignore-nulliblity? exists? command)
+                                                               entity run-state key-fields)]
+    (if (error? key-field-entity)
+      [key-field-entity key-field-run-state]
+      (let [[ignore-nulliblity? upd-key-field-entity upd-key-field-run-state]
+          (apply-command db schema command
+                         key-field-entity key-field-run-state)]
 
-        [non-key-field-entity non-key-run-state] (process-fields db schema
-                                                                 ignore-nulliblity?
-                                                                 command-map default-command
-                                                                 entity upd-key-field-run-state non-key-fields)]
-    [(merge upd-key-field-entity non-key-field-entity) non-key-run-state]))
+      (if (error? upd-key-field-entity)
+        [upd-key-field-entity upd-key-field-run-state]
+        (let [[non-key-field-entity non-key-run-state]
+            (process-fields db schema
+                            ignore-nulliblity?
+                            command-map default-command
+                            entity upd-key-field-run-state non-key-fields)]
+        [(merge upd-key-field-entity non-key-field-entity) non-key-run-state]))))))
 
 (defn process
   "returns a structurally similar version of the entity with error information"
