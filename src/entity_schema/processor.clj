@@ -7,6 +7,9 @@
            (java.util UUID Date Map)
            (clojure.lang Keyword)))
 
+
+
+
 (defn coll-not-map? [x]
   (and (coll? x) (not (map? x))))
 
@@ -29,8 +32,6 @@
    :db.type/bytes   (Class/forName "[B")
    :db.type/ref     #{Map Keyword}})
 
-
-
 (defn error [type msg data]
   {:error/type    type
    :error/message msg
@@ -39,30 +40,12 @@
 (defn error? [v]
   (and (map? v) (contains? v :error/type)))
 
-(defmacro error->>
-  "When expr is not an errored (according to error?), threads it into the first form (via ->>),
-  and when that result is not errored, through the next etc"
-  [expr & forms]
-  (let [g (gensym)
-        steps (map (fn [step] `(if (error? ~g) nil (->> ~g ~step)))
-                   forms)]
-    `(let [~g ~expr
-           ~@(interleave (repeat g) (butlast steps))]
-       ~(if (empty? steps)
-          g
-          (last steps)))))
-
-
-
-
 (defn valid?
   "is the validation result valid?"
   [result]
   (cond (map? result) (and (not (error? result)) (valid? (into [] (vals result))))
         (coll? result) (every? valid? result)
         :else true))
-
-
 
 ;Error functions
 (defn incorrect-type-error [value datomic-type valid-types]
