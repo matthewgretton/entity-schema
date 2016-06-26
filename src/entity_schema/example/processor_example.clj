@@ -132,7 +132,7 @@
 
 ;;Can we make the combine method associtive?????
 (def entities (->> (p/process-all (d/db conn) :entity.schema.type/funding-channel
-                    {} :command/insert
+                    {:command-map {} :default-command :command/insert}
                     [full-fc-entity
                      ent2
                      ent2
@@ -144,7 +144,7 @@
 
 
 (def entities2 (->> (p/process-all (d/db conn) :entity.schema.type/funding-channel
-                                  {} :command/update
+                                   {:command-map {} :default-command :command/update}
                                   [full-fc-entity
                                    ent2
                                    ent2
@@ -153,6 +153,8 @@
                    (into [])))
 
 @(d/transact conn entities2)
+
+
 
 
 
