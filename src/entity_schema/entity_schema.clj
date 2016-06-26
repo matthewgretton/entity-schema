@@ -180,58 +180,38 @@
 
   "Implementation details of database access for entity"
 
-  (->entity-schema-by-id [id] "Pull the whole schema for the Id")
+  (->entity-schema-by-id [p id] "Pull the whole schema for the Id")
 
-  (->db-id [partition])
+  (->db-id [p partition])
 
-  (->sub-type-id [entity] "Derive the sub-type id from the entity")
+  (->sub-type-id [p entity] "Derive the sub-type id from the entity")
 
-  (->entity-schema-id-by-type [schema-type] [schema-type sub-type] "Get the entity schema id/ids by type/type & sub-type")
+  (->entity-schema-id-by-type [p schema-type] [p schema-type sub-type] "Get the entity schema id/ids by type/type & sub-type")
 
-  (->entity-id [natural-key-list entity] "Look up entity id by natural key")
+  (->entity-id [p natural-key-list entity] "Look up entity id by natural key")
 
   )
 
 
-(defrecord Datomic-EntitySchema [db]
+(deftype Datomic-EntitySchema [db]
   EntitySchema
 
-  (->entity-schema-by-id [id]
-    (pull-schema-by-id db id))
+  (->entity-schema-by-id [p id] (pull-schema-by-id db id))
 
-  (->db-id [partition]
-    (d/tempid partition))
+  (->db-id [p partition] (d/tempid partition))
 
-  (->sub-type-id [entity] (derive-sub-type entity))
+  (->sub-type-id [p entity] (derive-sub-type entity))
 
-  (->entity-schema-id-by-type [schema-type]
-    (get-schema-id-by-type db schema-type))
+  (->entity-schema-id-by-type [p schema-type] (get-schema-id-by-type db schema-type))
 
-  (->entity-schema-id-by-type [schema-type sub-type] (get-schema-id-by-type db schema-type sub-type))
+  (->entity-schema-id-by-type [p schema-type sub-type] (get-schema-id-by-type db schema-type sub-type))
 
-  (->entity-id [natural-key-list entity] (dh/look-up-entity-by-natural-key db natural-key-list entity))
+  (->entity-id [p natural-key-list entity] (dh/look-up-entity-by-natural-key db natural-key-list entity))
 
   )
 
 
 
-(defprotocol Psychodynamics
-  "Plumb the inner depths of your data types"
-  (thoughts [x] "The data type's innermost thoughts")
-  (feelings-about [x] [x y] "Feelings about self or other"))
-
-(defrecord Bob [])
-
-(extend-type Bob
-  Psychodynamics
-  (thoughts [x] (str x " thinks, 'Truly, the character defines the data type'"))
-  (feelings-about ([x] (str x " is longing for a simpler way of life"))
-                  ([x y] (str x y " is longing for a simpler way of life"))))
-
-
-
-
-(feelings-about (Bob.) "Ted" "Fred")
 
 
 
