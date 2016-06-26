@@ -133,12 +133,6 @@
 (defn get-key-set [{:keys [:entity.schema/natural-key]}]
   (->> natural-key (map :db/ident) (into #{})))
 
-(defn nullable-field? [ignore-nulliblity?
-                       {nullable? :field/nullable?}]
-  (if ignore-nulliblity?
-    true
-    nullable?))
-
 (defn validate-field [db entity-schema field entity-in-db? command-data entity id-cache]
   (let [{{field-ident             :db/ident
           {cardinality :db/ident} :db/cardinality
