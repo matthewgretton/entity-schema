@@ -1,11 +1,10 @@
 (ns entity-schema.example.processor-example
-  (:require [entity-schema.yaml-conversion :as fy]
+  (:require [entity-schema.example.yaml-conversion :as fy]
             [datomic.api :as d]
-            [entity-schema.datomic-helper :as dh]
-            [entity-schema.entity-schema :as es]
-            [entity-schema.validation :as v]
+            [entity-schema.datomic.datomic-helper :as dh]
+            [entity-schema.datomic.entity-schema-data :as esd]
             [entity-schema.processor :as p]
-            [clojure.core.reducers :as r])
+            [entity-schema.datomic.entity-schema :as es])
   (:import (java.util UUID Date)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -21,7 +20,7 @@
               (d/connect uri)))
 
 ;; boot-strap entity schema fields
-@(d/transact conn es/all-fields)
+@(d/transact conn esd/all-fields)
 
 ;;funding channel
 
@@ -121,12 +120,6 @@
 
 (def ent2
   (assoc full-fc-entity :funding-channel/uuid (UUID/randomUUID)))
-
-
-(p/process (d/db conn) :entity.schema.type/funding-channel
-           {} :command/insert
-           full-fc-entity)
-
 
 
 

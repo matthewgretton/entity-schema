@@ -1,9 +1,10 @@
 (ns entity-schema.example.nested-entities-example
   (:require [entity-schema.yaml-conversion :as fy]
             [datomic.api :as d]
-            [entity-schema.datomic-helper :as dh]
-            [entity-schema.entity-schema :as es]
-            [entity-schema.validation :as v])
+            [entity-schema.datomic.datomic-helper :as dh]
+            [entity-schema.datomic.entity-schema-data :as esd]
+            [entity-schema.validation :as v]
+            [entity-schema.datomic.entity-schema :as es])
   (:import (java.util UUID Date)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -19,7 +20,7 @@
               (d/connect uri)))
 
 ;; boot-strap entity schema fields
-@(d/transact conn es/all-fields)
+@(d/transact conn esd/all-fields)
 
 ;;funding channel
 
@@ -229,5 +230,3 @@
      (v/valid?))
 
 
-(->> (dh/build-query-map (d/db conn) [:db/ident :entity.schema/fields] {:db/ident :db.cardinality/many})
-     (d/query))

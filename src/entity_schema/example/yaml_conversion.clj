@@ -1,8 +1,7 @@
-(ns entity-schema.yaml-conversion
+(ns entity-schema.example.yaml-conversion
   (:require [clj-yaml.core :as yaml]
             [datomic.api :as d]
-            [entity-schema.entity-schema :as es]
-            [entity-schema.datomic-helper :as dh]))
+            [entity-schema.datomic.datomic-helper :as dh]))
 
 
 (def yaml-datomic-type-map

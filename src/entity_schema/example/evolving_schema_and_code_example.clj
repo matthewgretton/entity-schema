@@ -2,8 +2,10 @@
   (:require [entity-schema.yaml-conversion :as fy]
             [datomic.api :as d]
             [entity-schema.validation :as v]
-            [entity-schema.entity-schema :as es]
-            [entity-schema.datomic-helper :as dh])
+            [entity-schema.datomic.entity-schema-data :as esd]
+            [entity-schema.datomic.entity-schema :as es]
+            [entity-schema.datomic.entity-schema-modification :as esm]
+            [entity-schema.datomic.datomic-helper :as dh])
   (:import (java.util Date UUID)))
 
 
@@ -22,7 +24,7 @@
               (d/connect uri)))
 
 ;; boot-strap entity schema fields
-@(d/transact conn es/all-fields)
+@(d/transact conn esd/all-fields)
 
 ;;funding channel
 ;;create clojure data structure from yaml file
@@ -69,7 +71,7 @@
 (v/assert-valid (d/db conn) :entity.schema.type/funding-channel fc-entity)
 
 ;; Make :funding-channel/name nullable
-@(d/transact conn [(es/set-nullibility?-tx (d/db conn)
+@(d/transact conn [(esm/set-nullibility?-tx (d/db conn)
                                            :entity.schema/funding-channel
                                            :funding-channel/name
                                            true)])
@@ -175,7 +177,7 @@
 ;; Atomically change the function entity, and the entity schema. Note that if your schema change affected many handler
 ;; functions then you would need to change these other functions at the same time.
 @(d/transact conn [
-                   (es/set-nullibility?-tx (d/db conn)
+                   (esm/set-nullibility?-tx (d/db conn)
                                            :entity.schema/funding-channel
                                            :funding-channel/name
                                            false)           ; schema change

@@ -1,7 +1,7 @@
 (ns entity-schema.validation-test
   (:require [clojure.test :refer :all]
             [entity-schema.validation :as v]
-            [entity-schema.entity-schema :as es]
+            [entity-schema.entity-schema-data :as es]
             [entity-schema.datomic-helper :as dh]
             [datomic.api :as d])
   (:import (java.util Date)))

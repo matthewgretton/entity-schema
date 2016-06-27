@@ -1,14 +1,9 @@
 (ns entity-schema.processor
-  (:require [entity-schema.entity-schema :as es]
-            [datomic.api :as d]
-            [entity-schema.datomic-helper :as dh]
+  (:require [entity-schema.datomic.entity-schema :as es]
             [clojure.core.reducers :as r])
   (:import (java.net URI)
            (java.util UUID Date Map)
            (clojure.lang Keyword)))
-
-
-
 
 (defn coll-not-map? [x]
   (and (coll? x) (not (map? x))))
@@ -104,7 +99,7 @@
 
 (defn expand-ref [db schema-type type-checked-val]
   (if (keyword? type-checked-val)
-    (if-let [e (es/pull-schema-by-id db type-checked-val)]
+    (if-let [e ( db type-checked-val)]
       (if (= (get-in e [:entity.schema/type :db/ident]) schema-type)
         e
         (incorrect-ident-error schema-type type-checked-val))
@@ -161,12 +156,14 @@
    (-> (update-id-cache id-cache id-cache-1)
        (update-id-cache id-cache-2))))
 
+(require 'spyscope.core)
+
 (defn assoc-id
   "Associate a :db/id element with the validated entity according to the specified command.
 
   Returns [entity-in-db? validated-entity-with-id updated-id-cache]"
   ([db {:keys [:db/ident :entity.schema/natural-key :entity.schema/part] :as schema}
-    {:keys [:command-map :default-command]}
+    {:keys [:command-map :default-command] :as command-data}
     validated-entity
     id-cache]
    (let [command (get command-map ident default-command)
@@ -174,7 +171,7 @@
          natural-key-set (->> natural-key-list
                               (map #(get validated-entity %))
                               (into #{}))]
-     (if-let [id (dh/look-up-entity-by-natural-key db natural-key-list validated-entity)]
+     (if-let [id (es/look-up-entity-by-natural-key db natural-key-list validated-entity)]
        ;;entity already exists
        [true (cond
                (= command :command/insert)
@@ -187,17 +184,17 @@
                {:db/id id}) id-cache]
        ;; entity does not exist
        (cons
+         false
          (cond
            (contains? #{:command/insert :command/upsert} command)
            (if-let [id (get-in id-cache [ident natural-key-set])]
              [(assoc validated-entity :db/id id) id-cache]
-             (let [new-id (d/tempid (:db/ident part))
+             (let [new-id (es/tempid (:db/ident part))
                    upd-id-cache (update-id-cache id-cache ident natural-key-set new-id)]
                [(assoc validated-entity :db/id new-id) upd-id-cache]))
 
            (contains? #{:command/look-up :command/update} command)
-           [(assoc validate-entity :db/id (entity-expected-to-exist-error natural-key-list validated-entity)) id-cache])
-         false)))))
+           [(assoc validate-entity :db/id (entity-expected-to-exist-error natural-key-list validated-entity)) id-cache]))))))
 
 (defn split-fields-by-natural-key [fields natural-key-set]
   (let [grouped-fields (->> fields
@@ -267,7 +264,7 @@
 
 (defn intersect-id-cache [l-id-cache r-id-cache]
   (->> (intersect-with (fn [l-map r-map]
-                         (intersect-with (fn [l _] (d/tempid (:part l))) l-map r-map)) l-id-cache r-id-cache)
+                         (intersect-with (fn [l _] (es/tempid (:part l))) l-map r-map)) l-id-cache r-id-cache)
        (filter (comp not empty? second))
        (into {})))
 

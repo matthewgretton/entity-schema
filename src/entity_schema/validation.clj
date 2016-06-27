@@ -1,6 +1,5 @@
 (ns entity-schema.validation
-  (:require [entity-schema.entity-schema :as es]
-            [datomic.api :as d])
+  (:require [entity-schema.datomic.entity-schema :as es])
   (:import (java.net URI)
            (java.util UUID Date Map)
            (clojure.lang Keyword)))
