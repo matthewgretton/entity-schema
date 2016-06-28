@@ -1,6 +1,8 @@
 (ns entity-schema.datomic.entity-schema
   (:require [entity-schema.datomic.datomic-helper :as dh]
-            [datomic.api :as d]))
+            [datomic.api :as d]
+            [entity-schema.entity-schema :as es]))
+
 
 (defn pull-schema-by-id [db entity-schema-id]
   (-> (d/pull db '[:db/ident
@@ -74,14 +76,34 @@
                                        ))
           (->> r (first) (first))))))
 
+
+;Protocol - Not actually used this yet, but we'll see.
+
+(deftype DatomicEntitySchema [db]
+  es/EntitySchemaDatabase
+
+  (->entity-schema [entity-schema-db id] (pull-schema-by-id db id))
+
+  (->new-db-id [entity-schema-db partition] (tempid partition))
+
+  (->sub-type-id [entity-schema-db entity] (derive-sub-type entity))
+
+  (->entity-schema-ids [entity-schema-db schema-type] (get-schema-ids-by-type db schema-type))
+
+  (->entity-schema-ids [entity-schema-db schema-type sub-type] (get-schema-ids-by-type db schema-type sub-type))
+
+  (->entity-id [entity-schema-db natural-key-list entity] (look-up-entity-by-natural-key db natural-key-list entity))
+
+  )
+
 (defn pull-schema-by-type
   ([db schema-type]
-   (->> (get-schema-ids-by-type db schema-type)
-        (map #(pull-schema-by-id db %))
+   (->> (es/->entity-schema-ids db schema-type)
+        (map #(es/->entity-schema db %))
         (into #{})))
   ([db schema-type entity-type]
-   (->> (get-schema-ids-by-type db schema-type entity-type)
-        (map #(pull-schema-by-id db %))
+   (->> (es/->entity-schema-ids db schema-type entity-type)
+        (map #(es/->entity-schema db %))
         (into #{}))))
 
 (defn first-of-one [coll]
@@ -96,25 +118,6 @@
   (let [{{schema-type :db/ident} :field/entity-schema-type} field]
     (assert (not (nil? schema-type)))
     (first-of-one
-      (if-let [sub-type (derive-sub-type entity)]
+      (if-let [sub-type (es/->sub-type-id db entity)]
         (pull-schema-by-type db schema-type sub-type)
         (pull-schema-by-type db schema-type)))))
-
-;;Protocol - Not actually used this yet, but we'll see.
-;
-;(deftype DatomicEntitySchema [db]
-;  EntitySchemaDatabase
-;
-;  (->entity-schema [db id] (pull-schema-by-id db id))
-;
-;  (->new-db-id [db partition] (tempid partition))
-;
-;  (->sub-type-id [db entity] (derive-sub-type entity))
-;
-;  (->entity-schema-ids [db schema-type] (get-schema-ids-by-type db schema-type))
-;
-;  (->entity-schema-ids [db schema-type sub-type] (get-schema-ids-by-type db schema-type sub-type))
-;
-;  (->entity-id [db natural-key-list entity] (look-up-entity-by-natural-key db natural-key-list entity))
-;
-;  )

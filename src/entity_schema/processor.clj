@@ -1,6 +1,7 @@
 (ns entity-schema.processor
-  (:require [entity-schema.datomic.entity-schema :as es]
-            [clojure.core.reducers :as r])
+  (:require [clojure.core.reducers :as r]
+            [entity-schema.entity-schema :as esp]
+            [entity-schema.datomic.entity-schema :as es])
   (:import (java.net URI)
            (java.util UUID Date Map)
            (clojure.lang Keyword)))
@@ -171,11 +172,12 @@
          natural-key-set (->> natural-key-list
                               (map #(get validated-entity %))
                               (into #{}))]
-     (if-let [id (es/look-up-entity-by-natural-key db natural-key-list validated-entity)]
+     (if-let [id (esp/->entity-id db natural-key-list validated-entity)]
        ;;entity already exists
        [true (cond
                (= command :command/insert)
-               (assoc validate-entity :db/id (entity-not-expected-to-exist-error natural-key-list validated-entity))
+               (do (clojure.pprint/pprint (type validated-entity))
+                   (assoc validated-entity :db/id (entity-not-expected-to-exist-error natural-key-list validated-entity)))
 
                (contains? #{:command/update :command/upsert} command)
                (assoc validated-entity :db/id id)
@@ -189,12 +191,12 @@
            (contains? #{:command/insert :command/upsert} command)
            (if-let [id (get-in id-cache [ident natural-key-set])]
              [(assoc validated-entity :db/id id) id-cache]
-             (let [new-id (es/tempid (:db/ident part))
+             (let [new-id (esp/->new-db-id db (:db/ident part))
                    upd-id-cache (update-id-cache id-cache ident natural-key-set new-id)]
                [(assoc validated-entity :db/id new-id) upd-id-cache]))
 
            (contains? #{:command/look-up :command/update} command)
-           [(assoc validate-entity :db/id (entity-expected-to-exist-error natural-key-list validated-entity)) id-cache]))))))
+           [(assoc validated-entity :db/id (entity-expected-to-exist-error natural-key-list validated-entity)) id-cache]))))))
 
 (defn split-fields-by-natural-key [fields natural-key-set]
   (let [grouped-fields (->> fields
@@ -262,17 +264,21 @@
        (map (fn [k] [k (f (get l k) (get r k))]))
        (into {})))
 
-(defn intersect-id-cache [l-id-cache r-id-cache]
+(defn intersect-id-cache [db l-id-cache r-id-cache]
   (->> (intersect-with (fn [l-map r-map]
-                         (intersect-with (fn [l _] (es/tempid (:part l))) l-map r-map)) l-id-cache r-id-cache)
+                         (intersect-with (fn [l _] (esp/->new-db-id db (:part l))) l-map r-map)) l-id-cache r-id-cache)
        (filter (comp not empty? second))
        (into {})))
 
 (defn combine-result
   "Combine the results from two parrallel runs"
   ([] [[] {}])
-  ([[l-es l-id-cache] [r-es r-id-cache]]
-   (let [cache-intersect (intersect-id-cache l-id-cache r-id-cache)
+  ([db] (fn
+          ([] (combine-result))
+          ([[l-es l-id-cache] [r-es r-id-cache]]
+            (combine-result db [l-es l-id-cache] [r-es r-id-cache]))))
+  ([db [l-es l-id-cache] [r-es r-id-cache]]
+   (let [cache-intersect (intersect-id-cache db l-id-cache r-id-cache)
          merged (update-id-cache l-id-cache r-id-cache cache-intersect)
          [l-id-map r-id-map] (->> cache-intersect
                                   (mapcat (fn [[e m]]
@@ -299,7 +305,7 @@
 (defn process-all
   ([db schema-type command-data entities]
    (->> entities
-        (r/fold combine-result
+        (r/fold (combine-result db)
                 (fn [[es id-cache] entity]
                   (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
                         [processed-entity updated-id-cache] (validate-entity db schema command-data entity id-cache)]

@@ -5,7 +5,8 @@
             [entity-schema.datomic.entity-schema-data :as esd]
             [entity-schema.processor :as p]
             [entity-schema.datomic.entity-schema :as es])
-  (:import (java.util UUID Date)))
+  (:import (java.util UUID Date)
+           (entity_schema.datomic.entity_schema DatomicEntitySchema)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; This example creates some schema from yaml files
@@ -52,7 +53,7 @@
 
 
 ;; immutable database snapshot
-(def first-draft-schema-db (d/db conn))
+(def first-draft-schema-db (DatomicEntitySchema. (d/db conn)))
 
 
 ;; Let's take a look at the schema we've created. We pull all schema by there type
@@ -88,7 +89,7 @@
 @(d/transact conn [add-ref-fields-to-funding-channel-schema-tx])
 
 
-(def schema-with-joins-db (d/db conn))
+(def schema-with-joins-db (DatomicEntitySchema. (d/db conn)))
 
 ;;Let's take a looka the full entity-schema for the funding cicle with joins
 (es/pull-schema-by-type schema-with-joins-db :entity.schema.type/funding-channel)
@@ -124,7 +125,7 @@
 
 
 ;;Can we make the combine method associtive?????
-(def entities (->> (p/process-all (d/db conn) :entity.schema.type/funding-channel
+(def entities (->> (p/process-all (DatomicEntitySchema. (d/db conn)) :entity.schema.type/funding-channel
                     {:command-map {} :default-command :command/insert}
                     [full-fc-entity
                      ent2
@@ -136,16 +137,16 @@
 @(d/transact conn entities)
 
 
-(def entities2 (->> (p/process-all (d/db conn) :entity.schema.type/funding-channel
+(def entities2 (->> (p/process-all (DatomicEntitySchema. (d/db conn)) :entity.schema.type/funding-channel
                                    {:command-map {} :default-command :command/update}
-                                  [full-fc-entity
+                                   [full-fc-entity
                                    ent2
                                    ent2
                                    full-fc-entity
                                    ])
                    (into [])))
 
-@(d/transact conn entities2)
+;@(d/transact conn entities2)
 
 
 
