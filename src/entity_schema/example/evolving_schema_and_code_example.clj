@@ -3,7 +3,7 @@
             [datomic.api :as d]
             [entity-schema.validation :as v]
             [entity-schema.datomic.entity-schema-data :as esd]
-            [entity-schema.datomic.entity-schema :as es]
+            [entity-schema.datomic.entity-schema-util :as es]
             [entity-schema.datomic.entity-schema-modification :as esm]
             [entity-schema.datomic.datomic-helper :as dh])
   (:import (java.util Date UUID)))

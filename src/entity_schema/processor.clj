@@ -1,7 +1,7 @@
 (ns entity-schema.processor
   (:require [clojure.core.reducers :as r]
-            [entity-schema.entity-schema :as esp]
-            [entity-schema.datomic.entity-schema :as es])
+            [entity-schema.datomic.entity-schema :as esp]
+            [entity-schema.datomic.entity-schema-util :as es])
   (:import (java.net URI)
            (java.util UUID Date Map)
            (clojure.lang Keyword)))
