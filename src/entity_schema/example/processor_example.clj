@@ -7,6 +7,13 @@
             [entity-schema.datomic.entity-schema-util :as es])
   (:import (java.util UUID Date)))
 
+
+(p/error?->> [1 2 3 4]
+             (map inc))
+
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; This example creates some schema from yaml files
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -71,8 +78,8 @@
     :db.install/_attribute :db.part/db
     :db/ident              :funding-channel/eligibility-criterions
     :db/valueType          :db.type/ref
-    :db/cardinality        :db.cardinality/many}            ;; one to many join
-   ])
+    :db/cardinality        :db.cardinality/many}])            ;; one to many join
+
 
 @(d/transact conn join-field-txs)
 
@@ -124,25 +131,25 @@
 
 
 ;;Can we make the combine method associtive?????
-(def entities (->> (p/process-all (d/db conn) :entity.schema.type/funding-channel
-                    {:command-map {} :default-command :command/insert}
-                    [full-fc-entity
-                     ent2
-                     ent2
-                     full-fc-entity
-                     ])
-     (into [])))
+(def entities (->> (p/process-all-entities (d/db conn) :entity.schema.type/funding-channel
+                                           {:command-map {} :default-command :command/insert}
+                                           [full-fc-entity
+                                            ent2
+                                            ent2
+                                            full-fc-entity])
+
+               (into [])))
 
 @(d/transact conn entities)
 
 
-(def entities2 (->> (p/process-all (d/db conn) :entity.schema.type/funding-channel
-                                   {:command-map {} :default-command :command/update}
-                                   [full-fc-entity
-                                   ent2
-                                   ent2
-                                   full-fc-entity
-                                   ])
+(def entities2 (->> (p/process-all-entities (d/db conn) :entity.schema.type/funding-channel
+                                            {:command-map {} :default-command :command/update}
+                                            [full-fc-entity
+                                             ent2
+                                             ent2
+                                             full-fc-entity])
+
                    (into [])))
 
 ;@(d/transact conn entities2)

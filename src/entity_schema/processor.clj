@@ -36,12 +36,14 @@
 (defn error? [v]
   (and (map? v) (contains? v :error/type)))
 
-(defn valid?
-  "is the validation result valid?"
-  [result]
-  (cond (map? result) (and (not (error? result)) (valid? (into [] (vals result))))
-        (coll? result) (every? valid? result)
-        :else true))
+(defn validate-and-process [seed-value id-cache validation-function process-function]
+  "Thread validation functions using seed-value as a starting point. Short circuits if any value in the chain is true
+   according to (error? value)"
+  (let [[validated-value errored?] (validation-function seed-value)]
+    (if errored?
+      [validated-value id-cache errored?]
+      (process-function id-cache seed-value))))
+
 
 ;Error functions
 (defn incorrect-type-error [value datomic-type valid-types]
@@ -58,23 +60,25 @@
          {:type            type
           :recognised-keys type-map}))
 
-(defn incorrect-ident-error [schema-type ident]
-  (error :error.type/incorrect-type
+(defn incorrect-ident-error [ident]
+  (error :error.type/incorrect-ident-error
          ":db/ident keyword does not refer to a transacted entity"
-         {:db/ident           ident
-          :entity.schema/type schema-type}))
+         {:db/ident ident}))
 
-(defn not-nullable-error [type-ident field]
+(defn not-nullable-error []
   (error :error.type/required-field
          "Required Field"
-         {:field field
-          :type  type-ident}))
+         {}))
 
-(defn incompatible-cardinality-error [field val]
+(defn incompatible-cardinality-error [value]
   (error :error.type/cardinality
          "Value associated with cardinality one field should not be a collection"
-         {:att field
-          :val val}))
+         {:value value}))
+
+(defn unrecognised-cardinality-error [card]
+  (error :error.type/un-recognised-cardinality
+         "Do not recognise cardinality"
+         {:cardinatlity card}))
 
 (defn entity-expected-to-exist-error [natural-key-list entity]
   (error :error.type/entity-expected-to-exist
@@ -88,115 +92,146 @@
          {:natural-key-list natural-key-list
           :entity           entity}))
 
+;; entity schema helper functions
+(defn ref-field? [{{{value-type :db/ident} :db/valueType} :field/schema}]
+  (= :db.type/ref value-type))
 
-;;Validation code
-(defn validate-type [datomic-type value]
-  (if-let [valid-types (->> (get valid-types datomic-type)
+(defn cardinality-many? [{{{cardinality :db/ident} :db/cardinality} :field/schema}]
+  (= cardinality :db.cardinality/many))
+
+(defn get-value [entity {{field-ident :db/ident} :field/schema}]
+  (get entity field-ident))
+
+
+;;Validating functions - This are functions [value field] -> [validated-value errored?]
+(defn validate-type [{{{value-type :db/ident} :db/valueType} :field/schema} value]
+  (if-let [valid-types (->> (get valid-types value-type)
                             (to-coll-not-map))]
     (if (some #(isa? (class value) %) valid-types)
-      value
-      (incorrect-type-error value datomic-type valid-types))
-    (unrecognised-type-error datomic-type valid-types)))
+      [value false]
+      [(incorrect-type-error value value-type valid-types) false])
+    [(unrecognised-type-error value-type valid-types) false]))
 
-(defn expand-ref [db schema-type type-checked-val]
-  (if (keyword? type-checked-val)
-    (if-let [e ( db type-checked-val)]
-      (if (= (get-in e [:entity.schema/type :db/ident]) schema-type)
-        e
-        (incorrect-ident-error schema-type type-checked-val))
-      (incorrect-ident-error schema-type type-checked-val))
-    type-checked-val))
+(defn validate-nullibility [entity-in-db? {nullable? :field/nullable?} value]
+  (if (not (nil? value))
+    [value false]
+    (if (not (or entity-in-db? nullable?))
+      [(not-nullable-error) true]
+      [nil false])))
 
-(declare validate-entity)
+(defn validate-cardinality [{{{cardinality :db/ident} :db/cardinality} :field/schema} value]
+  (cond (= cardinality :db.cardinality/many) [value false]
+        (= cardinality :db.cardinality/one) (if (coll-not-map? value)
+                                              [(incompatible-cardinality-error value) true]
+                                              [value false])
+        :else [(unrecognised-cardinality-error cardinality) true]))
 
-(defn get-key-set [{:keys [:entity.schema/natural-key]}]
-  (->> natural-key (map :db/ident) (into #{})))
+(defn expand-ref [db {{schema-type-id :db/ident} :field/entity-schema-type} value]
+  (if (keyword? value)
+    (if-let [e (esp/->entity-schema db value)]
+      (if (= (get-in e [:entity.schema/type :db/ident]) schema-type-id)
+        [e false]
+        [(incorrect-ident-error value) true])
+      [(incorrect-ident-error value) true])
+    [value true]))
 
-(defn validate-field [db entity-schema field entity-in-db? command-data entity id-cache]
-  (let [{{field-ident             :db/ident
-          {cardinality :db/ident} :db/cardinality
-          {value-type :db/ident}  :db/valueType} :field/schema
-         nullable?                               :field/nullable?} field
-        {{schema-type-id :db/ident} :entity.schema/type} entity-schema
-        [validated-value new-id-cache]
-        (if (contains? entity field-ident)
-          (let [value (get entity field-ident)
-                [validated-values updated-id-cache]
-                (->> (to-coll-not-map value)
-                     (reduce
-                       (fn [[validated-entities current-id-cache] value]
-                         (let [[validated-entity updated-id-cache]
-                               (let [type-checked-value (validate-type value-type value)]
-                                 (if (or (error? type-checked-value) (not= value-type :db.type/ref))
-                                   [type-checked-value current-id-cache]
-                                   (let [entity (expand-ref db schema-type-id type-checked-value)]
-                                     (if (error? entity)
-                                       [entity current-id-cache]
-                                       (let [schema (es/derive-schema db field entity)
-                                             [validated-entity updated-id-cache]
-                                             (validate-entity db schema command-data entity current-id-cache)]
-                                         [validated-entity updated-id-cache])))))]
-                           [(conj validated-entities validated-entity) updated-id-cache]))
-                       [#{} id-cache]))]
-            (if (= cardinality :db.cardinality/many)
-              [validated-values updated-id-cache]
-              (if (coll-not-map? value)
-                [(incompatible-cardinality-error field-ident value) id-cache]
-                [(first validated-values) id-cache])))
-          ;If the entity is in the db, we assume that we don't want need to check the nullibility of the fields
-          (if (not (or entity-in-db? nullable?))
-            [(not-nullable-error schema-type-id field-ident) id-cache]))]
-    [field-ident validated-value new-id-cache]))
+(defn merge-id-caches
+  ([id-cache-0 id-cache-1]
+   (merge-with (fn [l r] (merge l r)) id-cache-0 id-cache-1))
+  ([id-cache-0 id-cache-1 id-cache-2]
+   (-> (merge-id-caches id-cache-0 id-cache-1)
+       (merge-id-caches id-cache-2))))
 
 (defn update-id-cache
-  ([id-cache schema-ident natural-key id]
-   (update-id-cache id-cache {schema-ident {natural-key id}}))
-  ([id-cache id-cache-1]
-   (merge-with (fn [l r] (merge l r)) id-cache id-cache-1))
-  ([id-cache id-cache-1 id-cache-2]
-   (-> (update-id-cache id-cache id-cache-1)
-       (update-id-cache id-cache-2))))
+  ([id-cache ident natural-key-value-set id]
+   (merge-id-caches id-cache {ident {natural-key-value-set id}})))
 
-(require 'spyscope.core)
+(defn get-command [{:keys [:command-map :default-command]}
+                   entity-schema-ident]
+  (get command-map entity-schema-ident default-command))
 
-(defn assoc-id
-  "Associate a :db/id element with the validated entity according to the specified command.
+(defn natural-key-coll [{:keys [:entity.schema/natural-key]} coll]
+  (->> natural-key (map :db/ident) (into coll)))
 
-  Returns [entity-in-db? validated-entity-with-id updated-id-cache]"
-  ([db {:keys [:db/ident :entity.schema/natural-key :entity.schema/part] :as schema}
-    {:keys [:command-map :default-command] :as command-data}
-    validated-entity
-    id-cache]
-   (let [command (get command-map ident default-command)
-         natural-key-list (->> natural-key (map :db/ident) (into []))
-         natural-key-set (->> natural-key-list
-                              (map #(get validated-entity %))
-                              (into #{}))]
-     (if-let [id (esp/->entity-id db natural-key-list validated-entity)]
+;; TODO what happens if entity passed in is in error state???
+
+
+(defn enrich-entity-with-id
+  "Associate a :db/id element with the entity according to the specified command. Updates the id-cache to reflect
+  any new ids created.
+
+  Returns [entity-in-db? entity-with-id updated-id-cache valid?]"
+  ([db {:keys [:db/ident :entity.schema/part] :as schema} command-data entity id-cache]
+   (let [command (get-command command-data ident)
+         natural-key-list (natural-key-coll schema [])
+         natural-key-value-set (->> natural-key-list (map #(get entity %)) (into #{}))]
+     (if-let [id (esp/->entity-id db natural-key-list entity)]
        ;;entity already exists
-       [true (cond
-               (= command :command/insert)
-               (do (clojure.pprint/pprint (type validated-entity))
-                   (assoc validated-entity :db/id (entity-not-expected-to-exist-error natural-key-list validated-entity)))
-
-               (contains? #{:command/update :command/upsert} command)
-               (assoc validated-entity :db/id id)
-
-               (= command :command/look-up)
-               {:db/id id}) id-cache]
+       (let [[entity-with-id errored?] (cond
+                                         (= command :command/insert)
+                                         [(assoc entity :db/id (entity-not-expected-to-exist-error natural-key-list entity)) true]
+                                         (contains? #{:command/update :command/upsert :command/look-up} command)
+                                         [(assoc entity :db/id id) false])]
+         [true entity-with-id id-cache errored?])
        ;; entity does not exist
-       (cons
-         false
-         (cond
-           (contains? #{:command/insert :command/upsert} command)
-           (if-let [id (get-in id-cache [ident natural-key-set])]
-             [(assoc validated-entity :db/id id) id-cache]
-             (let [new-id (esp/->new-db-id db (:db/ident part))
-                   upd-id-cache (update-id-cache id-cache ident natural-key-set new-id)]
-               [(assoc validated-entity :db/id new-id) upd-id-cache]))
+       (let [[entity-with-id updated-id-cache]
+             (cond
+               (contains? #{:command/insert :command/upsert} command)
+               (if-let [id (get-in id-cache [ident natural-key-value-set])]
+                 [(assoc entity :db/id id) id-cache false]
+                 (let [new-id (esp/->new-db-id db (:db/ident part))
+                       upd-id-cache (update-id-cache id-cache ident natural-key-value-set new-id)]
+                   [(assoc entity :db/id new-id) upd-id-cache false]))
 
-           (contains? #{:command/look-up :command/update} command)
-           [(assoc validated-entity :db/id (entity-expected-to-exist-error natural-key-list validated-entity)) id-cache]))))))
+               (contains? #{:command/look-up :command/update} command)
+               [(assoc entity :db/id (entity-expected-to-exist-error natural-key-list entity)) id-cache true])]
+         [false entity-with-id updated-id-cache])))))
+
+(declare process-entity)
+
+(defn process-ref-entity [db command-data field id-cache ref-entity]
+  (let [schema (es/derive-schema db field ref-entity)]
+    (process-entity db schema command-data ref-entity id-cache)))
+
+(defn process-valid-value [db command-data field id-cache value]
+  (if (ref-field? field)
+    (validate-and-process value
+                          id-cache
+                          (partial expand-ref db field)
+                          (partial process-ref-entity command-data field))
+    [value id-cache false]))
+
+;;TODO just change back to error?
+(defn process-one-value [db entity-in-db? command-data field value id-cache]
+  (let [[nullibility-validated-value nullibility-errored?] (validate-nullibility entity-in-db? field value)]
+    (if (nil? nullibility-validated-value)
+      [nullibility-validated-value id-cache nullibility-errored?]
+      (validate-and-process nullibility-validated-value
+                            id-cache
+                            (partial validate-type field)
+                            (partial process-valid-value db command-data field)))))
+
+(defn process-many-values [db entity-in-db? command-data field id-cache many-values]
+  (reduce
+    (fn [[vs current-id-cache current-errored?] v]
+      (let [[new-v upd-id-cache errored?] (process-one-value db entity-in-db? command-data field v current-id-cache)]
+        [(conj vs new-v) upd-id-cache (or current-errored? errored?)]))
+    [#{} id-cache false]
+    many-values))
+
+(defn process-one-or-many-values [db entity-in-db? command-data field id-cache value]
+  (if (cardinality-many? field)
+    (process-many-values db entity-in-db? command-data field value id-cache)
+    (process-one-value db entity-in-db? command-data field value id-cache)))
+
+(defn process-field [db entity-in-db? command-data field entity id-cache]
+  "Get id and value for the field from the entity
+  returns [id value id-cache valid?]"
+  (validate-and-process (get-value entity field)
+                        id-cache
+                        (partial validate-cardinality field)
+                        (partial process-one-or-many-values db entity-in-db? command-data field)))
+
 
 (defn split-fields-by-natural-key [fields natural-key-set]
   (let [grouped-fields (->> fields
@@ -206,42 +241,43 @@
         non-key-fields (get grouped-fields false [])]
     [key-fields non-key-fields]))
 
-(defn process-fields [db schema entity-in-db? command-data entity id-cache fields]
-  (reduce (fn [[current-entity current-id-cache] field]
-            (let [[field-id value updated-id-cache] (validate-field db schema field entity-in-db? command-data
-                                                                    entity current-id-cache)
-                  updated-entity (if (nil? value)
-                                   current-entity
-                                   (assoc current-entity field-id value))]
-              [updated-entity updated-id-cache]))
-          [{} id-cache]
+(defn assoc-if-not-nil [map key value]
+  (if (nil? value) map (assoc map key value)))
+
+(defn process-fields [db entity-in-db? command-data entity id-cache fields]
+  (reduce (fn [[current-entity current-id-cache current-errored?] field]
+            (let [[value updated-id-cache errored?] (process-field db field entity-in-db? command-data entity current-id-cache)
+                  updated-entity (assoc-if-not-nil current-entity (get-in field [:field/schema :db/ident]) value)]
+              [updated-entity updated-id-cache (or errored? current-errored?)]))
+          [{} id-cache false]
           fields))
 
-(defn validate-entity
-  [db {:keys [:entity.schema/fields] :as schema} command-data entity id-cache]
-  (assert (not (nil? fields)))
-  (let [natural-key-set (get-key-set schema)
-        [key-fields non-key-fields] (split-fields-by-natural-key fields natural-key-set)
-        [key-field-entity key-field-id-cache]
-        (process-fields db schema false command-data entity id-cache key-fields)]
-    (if (error? key-field-entity)
-      [key-field-entity key-field-id-cache]
-      (let [[entity-in-db? upd-key-field-entity upd-key-field-id-cache]
-            (assoc-id db schema command-data key-field-entity key-field-id-cache)]
-        (if (error? upd-key-field-entity)
-          [upd-key-field-entity upd-key-field-id-cache]
-          (let [[non-key-field-entity non-key-id-cache]
-                (process-fields db schema
-                                entity-in-db?
-                                command-data
-                                entity upd-key-field-id-cache non-key-fields)]
-            [(merge upd-key-field-entity non-key-field-entity) non-key-id-cache]))))))
+(defn process-entity
+  "When processing the entity the following is returned
 
-(defn process
-  "returns a structurally similar version of the entity with error information"
+  [entity id-cache errored?]"
+  ([db {:keys [:entity.schema/fields] :as schema} command-data entity id-cache]
+   (assert (not (nil? fields)))
+   (let [natural-key-set (natural-key-coll schema #{})
+         [key-fields non-key-fields] (split-fields-by-natural-key fields natural-key-set)
+         [key-field-entity key-field-id-cache key-fields-errored?] (process-fields db false command-data entity id-cache key-fields)]
+     (if key-fields-errored?
+       [key-field-entity key-field-id-cache key-fields-errored?]
+       (let [[entity-in-db? upd-key-field-entity upd-key-field-id-cache enrich-error?] (enrich-entity-with-id db schema command-data key-field-entity key-field-id-cache)]
+         (if enrich-error?
+           [upd-key-field-entity upd-key-field-id-cache enrich-error?]
+           (let [[non-key-field-entity non-key-id-cache non-key-fields-errored?] (process-fields db
+                                                                                                 entity-in-db?
+                                                                                                 command-data
+                                                                                                 entity upd-key-field-id-cache non-key-fields)
+                 merged-entity (merge upd-key-field-entity non-key-field-entity)]
+             [merged-entity non-key-id-cache non-key-fields-errored?]))))))
+
   ([db schema-type command-data entity]
    (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)]
-     (first (validate-entity db schema command-data entity {})))))
+     (first (process-entity db schema command-data entity {})))))
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;; Process All ;;;;;;;;;
@@ -272,14 +308,14 @@
 
 (defn combine-result
   "Combine the results from two parrallel runs"
-  ([] [[] {}])
+  ([] [[] {} false])
   ([db] (fn
           ([] (combine-result))
-          ([[l-es l-id-cache] [r-es r-id-cache]]
-            (combine-result db [l-es l-id-cache] [r-es r-id-cache]))))
-  ([db [l-es l-id-cache] [r-es r-id-cache]]
+          ([[l-es l-id-cache l-errored?] [r-es r-id-cache r-errored?]]
+           (combine-result db [l-es l-id-cache l-errored?] [r-es r-id-cache r-errored?]))))
+  ([db [l-es l-id-cache l-errored?] [r-es r-id-cache r-errored?]]
    (let [cache-intersect (intersect-id-cache db l-id-cache r-id-cache)
-         merged (update-id-cache l-id-cache r-id-cache cache-intersect)
+         merged (merge-id-caches l-id-cache r-id-cache cache-intersect)
          [l-id-map r-id-map] (->> cache-intersect
                                   (mapcat (fn [[e m]]
                                             (->> m
@@ -300,18 +336,28 @@
                                                                 (into [] es)
                                                                 es)
                                                               (replace-id map)))))]
-     [(r/cat transformed-l-es transformed-r-es) merged])))
+     [(r/cat transformed-l-es transformed-r-es) merged (or l-errored? r-errored?)])))
 
-(defn process-all
+(defn process-all-entities
   ([db schema-type command-data entities]
    (->> entities
         (r/fold (combine-result db)
-                (fn [[es id-cache] entity]
+                (fn [[es id-cache current-errored?] entity]
                   (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
-                        [processed-entity updated-id-cache] (validate-entity db schema command-data entity id-cache)]
-                    [(conj es processed-entity) updated-id-cache]
-                    )))
+                        [processed-entity updated-id-cache errored?] (process-entity db schema command-data entity id-cache)]
+                    [(conj es processed-entity) updated-id-cache (or current-errored? errored?)])))
+
         (first))))
+
+
+
+
+
+
+
+
+
+
 
 
 

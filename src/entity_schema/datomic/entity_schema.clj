@@ -77,8 +77,8 @@
                                        "natural-key:\n" (with-out-str (clojure.pprint/pprint natural-key)) "\n"
                                        "entity:\n" (with-out-str (clojure.pprint/pprint entity)) "\n"
                                        "query-map\n" (with-out-str (clojure.pprint/pprint query-map)) "\n"
-                                       "result:\n" (with-out-str (clojure.pprint/pprint r))
-                                       ))
+                                       "result:\n" (with-out-str (clojure.pprint/pprint r))))
+
           (->> r (first) (first))))))
 
 
