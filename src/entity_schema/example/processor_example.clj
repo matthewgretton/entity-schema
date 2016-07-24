@@ -7,13 +7,6 @@
             [entity-schema.datomic.entity-schema-util :as es])
   (:import (java.util UUID Date)))
 
-
-(p/error?->> [1 2 3 4]
-             (map inc))
-
-
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; This example creates some schema from yaml files
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -78,7 +71,7 @@
     :db.install/_attribute :db.part/db
     :db/ident              :funding-channel/eligibility-criterions
     :db/valueType          :db.type/ref
-    :db/cardinality        :db.cardinality/many}])            ;; one to many join
+    :db/cardinality        :db.cardinality/many}])          ;; one to many join
 
 
 @(d/transact conn join-field-txs)
@@ -128,31 +121,37 @@
 (def ent2
   (assoc full-fc-entity :funding-channel/uuid (UUID/randomUUID)))
 
-
+(p/process-entity (d/db conn) :entity.schema.type/funding-channel
+                  {:command-map {} :default-command :command/insert}
+                  full-fc-entity)
 
 ;;Can we make the combine method associtive?????
-(def entities (->> (p/process-all-entities (d/db conn) :entity.schema.type/funding-channel
-                                           {:command-map {} :default-command :command/insert}
-                                           [full-fc-entity
-                                            ent2
-                                            ent2
-                                            full-fc-entity])
+(def process-result (let [[es errored?]
+                          (p/process-all-entities (d/db conn) :entity.schema.type/funding-channel
+                                                  {:command-map {} :default-command :command/insert}
+                                                  [full-fc-entity
+                                                   ent2
+                                                   ent2
+                                                   full-fc-entity])]
 
-               (into [])))
-
-@(d/transact conn entities)
+                      [(into [] es) errored?]))
 
 
-(def entities2 (->> (p/process-all-entities (d/db conn) :entity.schema.type/funding-channel
-                                            {:command-map {} :default-command :command/update}
-                                            [full-fc-entity
-                                             ent2
-                                             ent2
-                                             full-fc-entity])
 
-                   (into [])))
 
-;@(d/transact conn entities2)
+@(d/transact conn (p/get-entities-from-process-result process-result))
+
+
+(def process-result2 (p/process-all-entities (d/db conn) :entity.schema.type/funding-channel
+                                             {:command-map {} :default-command :command/update}
+                                             [full-fc-entity
+                                              ent2
+                                              ent2
+                                              full-fc-entity]))
+
+
+
+@(d/transact conn (p/get-entities-from-process-result process-result2))
 
 
 

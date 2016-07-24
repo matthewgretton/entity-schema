@@ -3,12 +3,12 @@
 
 (defn pull-schema-by-type
   ([db schema-type]
-   (->> (es/->entity-schema-ids db schema-type)
-        (map #(es/->entity-schema db %))
+   (->> (es/find-entity-schema-ids db schema-type)
+        (map #(es/pull-entity-schema db %))
         (into #{})))
   ([db schema-type entity-type]
-   (->> (es/->entity-schema-ids db schema-type entity-type)
-        (map #(es/->entity-schema db %))
+   (->> (es/find-entity-schema-ids db schema-type entity-type)
+        (map #(es/pull-entity-schema db %))
         (into #{}))))
 
 (defn first-of-one [coll]
@@ -23,6 +23,6 @@
   (let [{{schema-type :db/ident} :field/entity-schema-type} field]
     (assert (not (nil? schema-type)))
     (first-of-one
-      (if-let [sub-type (es/->sub-type-id db entity)]
+      (if-let [sub-type (es/derive-sub-type-id db entity)]
         (pull-schema-by-type db schema-type sub-type)
         (pull-schema-by-type db schema-type)))))

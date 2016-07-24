@@ -6,9 +6,7 @@
 ;TODO add in a check that there is at least one item in the entity
 (defn build-query-map [db natural-key entity]
   (assert (some (fn [k] (contains? entity k)) natural-key) (str "There needs to be at least of the natural keys in the map" "\n"
-
                                                                 "natural-key:" "\n" (with-out-str (clojure.pprint/pprint natural-key)) "\n"
-
                                                                 "entity:" "\n" (with-out-str (clojure.pprint/pprint entity))))
   (let [ent-sym '?e
         [where in args] (->> (map vector natural-key (range (count natural-key)))
@@ -25,8 +23,8 @@
      :args  args}))
 
 
-;; Methods to implement for a different database type
-(defn ->entity-schema [db entity-schema-id]
+;; Methods that relate to database
+(defn pull-entity-schema [db entity-schema-id]
   "Pull the whole schema for the Id"
   (-> (d/pull db '[:db/ident
                    {:entity.schema/type [:db/ident]}
@@ -41,7 +39,7 @@
                                                 {:list/rest ...}]}] entity-schema-id)
       (update :entity.schema/natural-key dh/from-linked-list-entity)))
 
-(defn ->entity-schema-ids
+(defn find-entity-schema-ids
   "Get the entity schema id/ids for supplied type/type & sub-type"
   ([db schema-type entity-type]
    (->> (d/q '[:find ?e
@@ -58,17 +56,15 @@
         (map first)
         (into #{}))))
 
-(defn ->sub-type-id [db entity]
+(defn derive-sub-type-id [db entity]
   "Derive the sub-type entity id from the entity"
   (:entity.schema/sub-type entity))
 
-
-(defn ->new-db-id [db part]
+(defn generate-db-id [db part]
   "Create a new entity id"
   (d/tempid part))
 
-
-(defn ->entity-id [db natural-key entity]
+(defn look-up-entity-id [db natural-key entity]
   "Look up the entity id based on the natural key and specified entity"
   (let [query-map (build-query-map db natural-key entity)
         r (d/query query-map)]
@@ -80,5 +76,8 @@
                                        "result:\n" (with-out-str (clojure.pprint/pprint r))))
 
           (->> r (first) (first))))))
+
+(defn transact-entities [conn tx-data]
+  (d/transact conn tx-data))
 
 
