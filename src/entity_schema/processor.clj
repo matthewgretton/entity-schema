@@ -16,6 +16,8 @@
 (defn assoc-if-not-nil [map key value]
   (if (nil? value) map (assoc map key value)))
 
+(def ref-identifier-types #{Keyword Long})
+
 (def valid-types
   {
    :db.type/keyword Keyword
@@ -30,7 +32,7 @@
    :db.type/uuid    UUID
    :db.type/uri     URI
    :db.type/bytes   (Class/forName "[B")
-   :db.type/ref     #{Map Keyword}})
+   :db.type/ref     (conj ref-identifier-types Map)})
 
 (defn error [type msg data]
   {:error/type    type
@@ -122,19 +124,18 @@
                                               [value false])
         :else [(unrecognised-cardinality-error cardinality) true])))
 
-(defn type-to-expand? [value]
-  (or (keyword? value)
-      ;(integer? value) ;Need to add in logic for this.
-      ))
+(defn ref-identifier-type? [value]
+  "Does Is the value of an identifier to an entity? "
+  (some (fn [t] (isa? (class value) t)) ref-identifier-types))
 
-(defn expand-ref [db {{schema-type-id :db/ident} :field/entity-schema-type} value]
-  (if (type-to-expand? value)
-    (if-let [e (esp/pull-entity-schema db value)]
-      (if (= (get-in e [:entity.schema/type :db/ident]) schema-type-id)
-        [e false]
-        [(incorrect-ident-error value) true])
+
+
+(defn expand-ref [db field value]
+  (if-let [entity-schema (esp/pull-entity-schema db value)]
+    (if (= (get-in entity-schema [:entity.schema/type :db/ident]) (get-in field [:field/entity-schema-type :db/ident]))
+      [entity-schema false]
       [(incorrect-ident-error value) true])
-    [value false]))
+    [(incorrect-ident-error value) true]))
 
 (defn merge-id-caches
   ([id-cache-0 id-cache-1]
@@ -180,7 +181,7 @@
                (contains? #{:command/insert :command/upsert} command)
                (if-let [id (get-in id-cache [ident natural-key-value-set])]
                  [(assoc entity :db/id id) id-cache false]
-                 (let [new-id (esp/generate-db-id db (:db/ident part))
+                 (let [new-id (esp/generate-db-id (:db/ident part))
                        upd-id-cache (update-id-cache id-cache ident natural-key-value-set new-id)]
                    [(assoc entity :db/id new-id) upd-id-cache false]))
 
@@ -191,7 +192,9 @@
 (declare process-entity)
 
 (defn process-ref-entity [db command-data field id-cache value]
-  (let [[expanded-value expand-errored?] (expand-ref db field value)]
+  (let [[expanded-value expand-errored?] (if (ref-identifier-type? value)
+                                           (expand-ref db field value)
+                                           [value false])]
     (if expand-errored?
       [value id-cache false]
       (let [schema (es/derive-schema db field expanded-value)
@@ -307,21 +310,17 @@
        (map (fn [k] [k (f (get l k) (get r k))]))
        (into {})))
 
-(defn intersect-id-cache [db l-id-cache r-id-cache]
+(defn intersect-id-cache [l-id-cache r-id-cache]
   (->> (intersect-with (fn [l-map r-map]
-                         (intersect-with (fn [l _] (esp/generate-db-id db (:part l))) l-map r-map)) l-id-cache r-id-cache)
+                         (intersect-with (fn [l _] (esp/generate-db-id (:part l))) l-map r-map)) l-id-cache r-id-cache)
        (filter (comp not empty? second))
        (into {})))
 
 (defn combine-result
   "Combine the results from two parrallel runs"
   ([] [[] {} false])
-  ([db] (fn
-          ([] (combine-result))
-          ([[l-es l-id-cache l-errored?] [r-es r-id-cache r-errored?]]
-           (combine-result db [l-es l-id-cache l-errored?] [r-es r-id-cache r-errored?]))))
-  ([db [l-es l-id-cache l-errored?] [r-es r-id-cache r-errored?]]
-   (let [cache-intersect (intersect-id-cache db l-id-cache r-id-cache)
+  ([[l-es l-id-cache l-errored?] [r-es r-id-cache r-errored?]]
+   (let [cache-intersect (intersect-id-cache l-id-cache r-id-cache)
          merged (merge-id-caches l-id-cache r-id-cache cache-intersect)
          [l-id-map r-id-map] (->> cache-intersect
                                   (mapcat (fn [[e m]]
@@ -348,7 +347,7 @@
   "Returns [[entity errored?]... any-errored?] "
   ([db schema-type command-data entities]
    (let [[es _ errored?]
-         (r/fold 1 (combine-result db)
+         (r/fold 1 (combine-result)
                  (fn [[es id-cache current-errored?] entity]
                    (let [schema (es/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
                          [processed-entity updated-id-cache errored?] (process-entity db schema command-data entity id-cache)]

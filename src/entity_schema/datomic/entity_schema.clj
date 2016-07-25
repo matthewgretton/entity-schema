@@ -60,7 +60,7 @@
   "Derive the sub-type entity id from the entity"
   (:entity.schema/sub-type entity))
 
-(defn generate-db-id [db part]
+(defn generate-db-id [part]
   "Create a new entity id"
   (d/tempid part))
 

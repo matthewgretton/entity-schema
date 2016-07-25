@@ -121,9 +121,7 @@
 (def ent2
   (assoc full-fc-entity :funding-channel/uuid (UUID/randomUUID)))
 
-(p/process-entity (d/db conn) :entity.schema.type/funding-channel
-                  {:command-map {} :default-command :command/insert}
-                  full-fc-entity)
+
 
 ;;Can we make the combine method associtive?????
 (def process-result (let [[es errored?]
