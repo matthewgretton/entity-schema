@@ -526,6 +526,11 @@
 
 (esp/pull-entity-schema (d/db conn) :entity.schema/ppd)
 
+
+
+
+
+;;TODO going to have to make the command stuff compatible with schema types.
 (p/process-all-entities (d/db conn)
                         :entity.schema/ppd
                         {:command-map {:entity.schema/ppd :command/insert
