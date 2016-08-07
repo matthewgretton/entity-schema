@@ -8,4 +8,5 @@
                  [com.datomic/datomic-pro "0.9.5359"]
                  [cursive/datomic-stubs "0.9.5153" :scope "provided"]
                  [clj-yaml "0.4.0"]
+                 [org.clojure/data.csv "0.1.3"]
                  [spyscope "0.1.5"]])

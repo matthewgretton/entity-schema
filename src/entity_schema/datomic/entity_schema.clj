@@ -33,7 +33,8 @@
                    {:entity.schema/fields [{:field/schema [:db/ident
                                                            {:db/cardinality [:db/ident]}
                                                            {:db/valueType [:db/ident]}]}
-                                           {:field/entity-schema-type [:db/ident]}
+                                           {:field/entity-schema-type [:db/ident]
+                                            :field/entity-schema [:db/ident]}
                                            :field/nullable?]}
                    {:entity.schema/natural-key [{:list/first [:db/ident]}
                                                 {:list/rest ...}]}] entity-schema-id)

@@ -1,7 +1,7 @@
 (ns entity-schema.validation
-  (:require [entity-schema.datomic.entity-schema-util :as es])
-  (:import (java.net URI)
-           (java.util UUID Date Map)
+  (:require [entity-schema.util :as u])
+  (:import (java.util Map UUID Date)
+           (java.net URI)
            (clojure.lang Keyword)))
 
 (defn coll-not-map? [x]
@@ -9,6 +9,25 @@
 
 (defn to-coll-not-map [x]
   (if (coll-not-map? x) x #{x}))
+
+(defn error? [v]
+  (and (map? v) (contains? v :error/type)))
+
+(defn error [type msg data]
+  {:error/type    type
+   :error/message msg
+   :error/data    data})
+
+(defn thread-validation-functions [field value validation-functions]
+  "Thread value through validation functions. Short circuits if value is errored or nil"
+  (if (empty? validation-functions)
+    [value false]
+    (let [[validated-value errored?] ((first validation-functions) field value)]
+      (if (or (nil? validated-value) errored?)
+        [validated-value errored?]
+        (recur field validated-value (rest validation-functions))))))
+
+(def ref-identifier-types #{Keyword Long})
 
 (def valid-types
   {
@@ -24,127 +43,102 @@
    :db.type/uuid    UUID
    :db.type/uri     URI
    :db.type/bytes   (Class/forName "[B")
-   :db.type/ref     #{Map Keyword}})
+   :db.type/ref     (conj ref-identifier-types Map)})
 
-(declare validate-entity)
+;;Validating functions - This are functions [value field] -> [validated-value errored?]
+(defn validate-type [{{{value-type :db/ident} :db/valueType} :field/schema} value]
+  (letfn [(incorrect-type-error [value datomic-type valid-types]
+            (error :error.type/incorrect-type
+                   "Incorrect Value Type"
+                   {:value        value
+                    :datomic-type datomic-type
+                    :value-type   (class value)
+                    :valid-types  valid-types}))
 
-(defn error [type msg data]
-  {:error/type    type
-   :error/message msg
-   :error/data    data})
+          (unrecognised-type-error [type type-map]
+            (error :error.type/unrecognised-type
+                   "Type not supported"
+                   {:type            type
+                    :recognised-keys type-map}))
 
-;Error functions
-(defn incorrect-type-error [value datomic-type valid-types]
-  (error :error.type/incorrect-type
-         "Incorrect Value Type"
-         {:value        value
-          :datomic-type datomic-type
-          :value-type   (class value)
-          :valid-types  valid-types}))
+          ]
+    (if-let [valid-types (->> (get valid-types value-type)
+                              (to-coll-not-map))]
+      (if (some #(isa? (class value) %) valid-types)
+        [value false]
+        [(incorrect-type-error value value-type valid-types) false])
+      [(unrecognised-type-error value-type valid-types) false])))
 
-(defn unrecognised-type-error [type type-map]
-  (error :error.type/unrecognised-type
-         "Type not supported"
-         {:type            type
-          :recognised-keys type-map}))
+(defn validate-nullibility [entity-in-db? {nullable? :field/nullable?} value]
+  (letfn [(not-nullable-error []
+            (error :error.type/required-field
+                   "Required Field"
+                   {}))]
+    (if (not (nil? value))
+      [value false]
+      (if (not (or entity-in-db? nullable?))
+        [(not-nullable-error) true]
+        [nil false]))))
 
-(defn incorrect-ident-error [schema-type ident]
-  (error :error.type/incorrect-type
-         ":db/ident keyword does not refer to a transacted entity"
-         {:db/ident           ident
-          :entity.schema/type schema-type}))
+(defn validate-cardinality [field value]
+  (letfn [(incompatible-cardinality-error [value]
+            (error :error.type/cardinality
+                   "Value associated with cardinality one field should not be a collection"
+                   {:value value}))
 
-(defn not-nullable-error [type-ident field]
-  (error :error.type/required-field
-         "Required Field"
-         {:field field
-          :type  type-ident}))
+          (unrecognised-cardinality-error [card]
+            (error :error.type/un-recognised-cardinality
+                   "Do not recognise cardinality"
+                   {:cardinality card}))]
+    (let [cardinality (get-in field [:field/schema :db/cardinality :db/ident])]
+      (cond (= cardinality :db.cardinality/many) [value false]
+            (= cardinality :db.cardinality/one) (if (coll-not-map? value)
+                                                  [(incompatible-cardinality-error value) true]
+                                                  [value false])
+            :else [(unrecognised-cardinality-error cardinality) true]))))
 
-(defn incompatible-cardinality-error [field val]
-  (error :error.type/cardinality
-         "Value associated with cardinality one field should not be a collection"
-         {:att field
-          :val val}))
+(defn validate-function [field value]
+  (if-let [f (get-in field [:field/validation-function :db/fn])]
+    (if-let [errored? (f value)]
+      [(error :error.type/validation-function "" {:func f}) errored?]
+      [value false])
+    [value false]))
 
-(defn error? [v]
-  (and (map? v) (contains? v :error/type)))
+(defn validate-expanded-ref [field unexpanded-ref expanded-ref]
+  (letfn [(incorrect-ident-error [ident]
+            (error :error.type/incorrect-ident-error
+                   ":db/ident keyword does not refer to a transacted entity"
+                   {:db/ident ident}))]
+    (if (nil? expanded-ref)
+      [(incorrect-ident-error unexpanded-ref) true]
+      (if (= (get-in expanded-ref [:entity.schema/type :db/ident]) (get-in field [:field/entity-schema-type :db/ident]))
+        [expanded-ref false]
+        [(incorrect-ident-error unexpanded-ref) true]))))
 
-(defn validate-type [datomic-type value]
-  (if-let [valid-types (->> (get valid-types datomic-type)
-                            (to-coll-not-map))]
-    (if (some #(isa? (class value) %) valid-types)
-      value
-      (incorrect-type-error value datomic-type valid-types))
-    (unrecognised-type-error datomic-type valid-types)))
+(defn validate-db-id [command-data schema db-id]
+  (letfn [(entity-expected-to-exist-error [natural-key-list]
+            (error :error.type/entity-expected-to-exist
+                   "Entity expected to exist"
+                   {:natural-key-list natural-key-list}))
 
-(defn expand-ref [db schema-type type-checked-val]
-  (if (keyword? type-checked-val)
-    (if-let [e (es/pull-schema-by-id db type-checked-val)]
-      (if (= (get-in e [:entity.schema/type :db/ident]) schema-type)
-        e
-        (incorrect-ident-error schema-type type-checked-val))
-      (incorrect-ident-error schema-type type-checked-val))
-    type-checked-val))
+          (entity-not-expected-to-exist-error [natural-key-list]
+            (error :error.type/entity-not-expected-to-exist
+                   "Entity not expected to exist"
+                   {:natural-key-list natural-key-list}))]
+    (let [command (u/get-command command-data (:db/ident schema))]
+      (if (nil? db-id)
+        ;; id not in db
+        (cond
+          (contains? #{:command/insert :command/upsert} command)
+          [db-id false]
+          (contains? #{:command/look-up :command/update} command)
+          [(entity-expected-to-exist-error (u/natural-key-coll schema [])) true])
+        ;; id in db
+        (cond
+          (contains? #{:command/insert} command)
+          [(entity-not-expected-to-exist-error (u/natural-key-coll schema [])) true]
+          (contains? #{:command/look-up :command/update :command/upsert} command)
+          [db-id false])))))
 
-(defn validate-ref-type [db field schema-type-id valueType v]
-  (let [type-checked-val (validate-type valueType v)]
-    (if (error? type-checked-val)
-      type-checked-val
-      (let [entity (expand-ref db schema-type-id type-checked-val)]
-        (if (error? entity)
-          entity
-          (->> (es/derive-schema db field entity)
-               (validate-entity db entity)))))))
 
-(defn validate-value [db entity field v]
-  (let [valueType (get-in field [:field/schema :db/valueType :db/ident])
-        schema-type-id (get-in entity [:entity.schema/type :db/ident])]
-    (if (= valueType :db.type/ref)
-                       (validate-ref-type db field schema-type-id valueType v)
-                       (validate-type valueType v))))
 
-(defn validate-field [db entity-schema field entity]
-  (let [{nullable?                               :field/nullable?
-         {field-ident             :db/ident
-          {cardinality :db/ident} :db/cardinality} :field/schema} field
-        {{schema-type-id :db/ident} :entity.schema/type} entity-schema
-        validated-value (if (contains? entity field-ident)
-                          (let [val (get entity field-ident)
-                                validated-vals (->> (to-coll-not-map val) ;if val is a single value put into a collection
-                                                    (map (partial validate-value db entity field))
-                                                    (into #{}))]
-                            (if (= cardinality :db.cardinality/many)
-                              validated-vals
-                              (if (coll-not-map? val)
-                                (incompatible-cardinality-error field-ident val)
-                                (first validated-vals))))
-                          (if (not nullable?)
-                            (not-nullable-error schema-type-id field-ident)))]
-    [field-ident validated-value]))
-
-(defn validate-entity
-  [db entity {:keys [:entity.schema/fields] :as schema}]
-  (->> fields
-       (map #(validate-field db schema % entity))
-       (filter (comp not nil? second))
-       (into {})))
-
-(defn validate
-  "returns a structurally similar version of the entity with error information"
-  ([db schema-type entity]
-   (->> (es/derive-schema db {:field/entity-schema-type
-                              {:db/ident schema-type}} entity)
-        (validate-entity db entity))))
-
-(defn valid?
-  "is the validation result valid?"
-  [result]
-  (cond (map? result) (and (not (error? result)) (valid? (into [] (vals result))))
-        (coll? result) (every? valid? result)
-        :else true))
-
-(defn assert-valid
-  ([db schema-type entity]
-   (let [validation (validate db schema-type entity)]
-     (assert (valid? validation)
-             (str "\n" (with-out-str (clojure.pprint/pprint validation)))))))

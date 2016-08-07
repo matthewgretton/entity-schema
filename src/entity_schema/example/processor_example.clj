@@ -4,7 +4,7 @@
             [entity-schema.datomic.datomic-helper :as dh]
             [entity-schema.datomic.entity-schema-data :as esd]
             [entity-schema.processor :as p]
-            [entity-schema.datomic.entity-schema-util :as es])
+            [entity-schema.util :as es])
   (:import (java.util UUID Date)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -122,12 +122,11 @@
   (assoc full-fc-entity :funding-channel/uuid (UUID/randomUUID)))
 
 
-
 ;;Can we make the combine method associtive?????
 (def process-result (let [[es errored?]
-                          (p/process-all-entities (d/db conn) :entity.schema.type/funding-channel
-                                                  {:command-map {} :default-command :command/insert}
-                                                  [full-fc-entity
+                          (p/process-all-entities-from-type (d/db conn) :entity.schema.type/funding-channel
+                                                            {:command-map {} :default-command :command/insert}
+                                                            [full-fc-entity
                                                    ent2
                                                    ent2
                                                    full-fc-entity])]
@@ -140,12 +139,14 @@
 @(d/transact conn (p/get-entities-from-process-result process-result))
 
 
-(def process-result2 (p/process-all-entities (d/db conn) :entity.schema.type/funding-channel
-                                             {:command-map {} :default-command :command/update}
-                                             [full-fc-entity
+(def process-result2 (p/process-all-entities-from-type (d/db conn) :entity.schema.type/funding-channel
+                                                       {:command-map {} :default-command :command/update}
+                                                       [
+                                              full-fc-entity
                                               ent2
                                               ent2
-                                              full-fc-entity]))
+                                              full-fc-entity
+                                              ]))
 
 
 
