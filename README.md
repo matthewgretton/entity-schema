@@ -4,7 +4,7 @@ Small example app to demonstrate storing entity schema data in a database, and u
 
 # Usage
 
-Give an example of a schema and also an example of an entity with a subtype.
+Schema Example:
 
 ```clojure
 {:db/ident                  :entity.schema/test
@@ -13,6 +13,14 @@ Give an example of a schema and also an example of an entity with a subtype.
                                                  :db/cardinality {:db/ident :db.cardinality/one}}
                                :field/nullable? false}}
  :entity.schema/natural-key [:test/field1]}
+```
+
+Entity Example
+
+```clojure
+{:entity.schema/type     :entity.schema.type/test-entity
+ :entity.schema.sub-type :entity.schema.sub-type/blah
+ :test-entity/field1     "Bob"}
 ```
 
 # Installation
