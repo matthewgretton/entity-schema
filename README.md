@@ -2,6 +2,10 @@
 
 Small example app to demonstrate storing entity schema data in a database, and using that information for validation purposes. Also demonstrates how versioning can be easliy implemented to ensure validation is consistent historically.
 
+# Usage
+
+Give an example of a schema and also an example of an entity with a subtype.
+
 # Installation
 
 To pull down Datomic dependencies you need to read from a private repository. This requires authentication credentials. 
