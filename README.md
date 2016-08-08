@@ -7,11 +7,11 @@ Small example app to demonstrate storing entity schema data in a database, and u
 Give an example of a schema and also an example of an entity with a subtype.
 
 ```clojure
-{:db/ident :entity.schema/test
- :entity.schema/fields #{{:field/schema {:db/ident :test/field1
-                                         :db/ValueType {:db/ident :db.type/string}
-                                          :db/cardinality {:db/ident  :db.cardinality/one}}
-                          :field/nullable? false}}
+{:db/ident                  :entity.schema/test
+ :entity.schema/fields      #{{:field/schema    {:db/ident       :test/field1
+                                                 :db/ValueType   {:db/ident :db.type/string}
+                                                 :db/cardinality {:db/ident :db.cardinality/one}}
+                               :field/nullable? false}}
  :entity.schema/natural-key [:test/field1]}
 ```
 
