@@ -2,30 +2,80 @@
   (:require [datomic.api :as d]
             [entity-schema.datomic.datomic-helper :as dh]
             [entity-schema.datomic.entity-schema-data :as esd]
-            [entity-schema.util :as es]
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
-            [entity-schema.datomic.entity-schema :as esp]
+            [entity-schema.datomic.entity-schema :as es]
             [entity-schema.processor :as p]
-            [entity-schema.util :as u])
+            [entity-schema.util :as u]
+            [io.rkn.conformity :as c])
   (:import (java.util UUID Date)
            (java.net URI)
            (java.time.format DateTimeFormatter)
            (java.time LocalDateTime ZoneOffset)))
 
 
+(require '[datomic.api :as d])
+(def uri "datomic:mem://my-project")
+(d/delete-database uri)
+(d/create-database uri)
+(def conn (d/connect uri))
 
-(defn to-datomic [part {:keys [:db/ident :entity.schema/fields :entity.schema/natural-key]}]
-  {:db/id                     (d/tempid part)
+; Hook up conformity and your sample datom
+(def norms-map1 {:entity-schema/schema
+                 {:txes [[{:db/id                 (d/tempid :db.part/db)
+                           :db/ident              :something/title
+                           :db/valueType          :db.type/string
+                           :db/cardinality        :db.cardinality/one
+                           :db/index              true
+                           :db.install/_attribute :db.part/db}
+                          {:db/id                 (d/tempid :db.part/db)
+                           :db/ident              :something/title2
+                           :db/valueType          :db.type/string
+                           :db/cardinality        :db.cardinality/one
+                           :db/index              true
+                           :db.install/_attribute :db.part/db}]
+                         ]}})
+
+(def norms-map2 {:entity-schema/schema2
+                 {:txes [[{:db/id                 :something/title2
+                           :db/cardinality        :db.cardinality/one
+                           :db.install/_attribute :db.part/db}]
+                         ]}})
+
+
+
+
+
+
+
+
+; -> false
+(c/ensure-conforms conn norms-map1 [:entity-schema/schema])
+(c/ensure-conforms conn norms-map2 [:entity-schema/schema2])
+
+
+(c/has-attribute? (d/db conn) :something/title)
+
+(d/pull (d/db conn) '[*] :something/title)
+
+
+
+
+
+
+(defn to-datomic [{:keys [:db/ident :entity.schema/fields :entity.schema/natural-key :entity.schema/part]}]
+  {:db/id                     (d/tempid :db.part/entity-schema)
    :db/ident                  ident
+   :entity.schema/part        part
    :entity.schema/fields      (->> fields
                                    (map #(assoc % :db/id (d/tempid part)))
                                    (into #{}))
    :entity.schema/natural-key (dh/build-datomic-linked-list part natural-key)
    })
 
-(defn enum-with-code-schema [entity-type]
+(defn enum-with-code-schema [entity-type part]
   {:db/ident                  (keyword "entity.schema" entity-type)
+   :entity.schema/part        part
    :entity.schema/fields      #{
                                 {:field/schema    (keyword entity-type "code")
                                  :field/nullable? false}
@@ -34,24 +84,29 @@
    :entity.schema/natural-key [(keyword entity-type "code")]})
 
 
-(declare structure-flat-data)
+(declare structure-row)
 
 (defn get-field-value [db field flat-data]
   (let [ident (get-in field [:field/schema :db/ident])
         type (get-in field [:field/schema :db/valueType :db/ident])]
     (if (= type :db.type/ref)
-      (let [schema (es/derive-schema db field flat-data)]
-        (structure-flat-data db (:db/ident schema) flat-data))
+      (let [schema (u/derive-schema db field flat-data)]
+        (structure-row db (:db/ident schema) flat-data))
       (get flat-data ident))))
 
 
-(defn structure-flat-data [db schema-id flat-data]
-  (->> (esp/pull-entity-schema db schema-id)
+(defn structure-row [db schema-id flat-data]
+  (->> (es/pull-entity-schema db schema-id)
        (:entity.schema/fields)
        (map (fn [f]
               [(get-in f [:field/schema :db/ident]) (get-field-value db f flat-data)]))
        (filter (comp not nil? second))
        (into {})))
+
+(defn structure-rows [db scheam-id data]
+  (map (fn [row] (structure-row db scheam-id row)) data))
+
+
 
 
 
@@ -120,7 +175,6 @@
 
 (def fields
   [
-
    {
     :db/id                 (d/tempid :db.part/db)
     :db/ident              :ppd/transaction-unique-identifier
@@ -236,6 +290,7 @@
     :db/doc                "This is the postcode used at the time of the original transaction. Note that postcodes can
                             be reallocated and these changes are not reflected in the Price Paid Dataset."
     :db/valueType          :db.type/string
+    :db/index              true
     :db/cardinality        :db.cardinality/one
     :db.install/_attribute :db.part/db
     }
@@ -247,6 +302,7 @@
                            If there is a sub-building for example the building is
                            divided into flats, see Secondary Addressable Object Name (SAON)."
     :db/valueType          :db.type/string
+    :db/index              true
     :db/cardinality        :db.cardinality/one
     :db.install/_attribute :db.part/db
     }
@@ -258,6 +314,7 @@
                             divided into flats, there will be a SAON."
     :db/valueType          :db.type/string
     :db/cardinality        :db.cardinality/one
+    :db/index              true
     :db.install/_attribute :db.part/db
     }
 
@@ -391,14 +448,34 @@
    {:db/id         (d/tempid :db.part/user)
     :duration/code "L"
     :db/ident      :duration/leasehold}
+
+   {:db/id              (d/tempid :db.part/user)
+    :db/ident           :category-type/standard-price-paid
+    :category-type/code "A"}
+
+   {:db/id              (d/tempid :db.part/user)
+    :db/ident           :category-type/additional-price-paid
+    :category-type/code "B"}
+
+   {:db/id              (d/tempid :db.part/user)
+    :db/ident           :record-status/addition
+    :record-status/code "A"}
+
+   {:db/id              (d/tempid :db.part/user)
+    :db/ident           :record-status/change
+    :record-status/code "C"}
+
+   {:db/id              (d/tempid :db.part/user)
+    :db/ident           :record-status/delete
+    :record-status/code "D"}
+
    ])
 
-(def schema-types
-  [{:db/id (d/tempid :db.part/user)}])
 
 
 (def address-schema
   {:db/ident                  :entity.schema/address
+   :entity.schema/part        :db.part/user
    :entity.schema/fields      #{
                                 {:field/schema    :address/county
                                  :field/nullable? true}
@@ -424,7 +501,7 @@
                                 {:field/schema    :address/town_or_city
                                  :field/nullable? true}}
 
-   :entity.schema/natural-key [:address/postcode :address/PAON :address/SAON]
+   :entity.schema/natural-key [:address/postcode :address/PAON :address/SAON :address/street]
    })
 
 
@@ -435,6 +512,7 @@
 
 (def ppd-schema
   {:db/ident                  :entity.schema/ppd
+   :entity.schema/part        :db.part/user
    :entity.schema/fields      #{
                                 {:field/schema    :ppd/transaction-unique-identifier
                                  :field/nullable? false}
@@ -490,14 +568,13 @@
 
 (def enum-schemas
   (->> ["age" "duration" "record-status" "category-type" "property-type"]
-       (map (fn [x] (to-datomic :db.part/entity-schema (enum-with-code-schema x))))))
+       (map (fn [x] (to-datomic (enum-with-code-schema x :db.part/user))))))
 
 @(d/transact conn enum-schemas)
 
-@(d/transact conn [(to-datomic :db.part/entity-schema address-schema)])
+@(d/transact conn [(to-datomic address-schema)])
 
-@(d/transact conn [(to-datomic :db.part/entity-schema ppd-schema)])
-
+@(d/transact conn [(to-datomic ppd-schema)])
 
 
 
@@ -507,39 +584,46 @@
        (map #(zipmap header %))))
 
 
-
-
 (defn process-csv [db header csv-path]
   (with-open [in-file (io/reader csv-path)]
     (->> (csv/read-csv in-file)
          (process-data db header)
-         (take 10)
-         (into []))))
+
+         (structure-rows db :entity.schema/ppd)
+         (take 10000)
+         (into [])
+         ;;TODO going to have to make the command stuff compatible with schema types.
+         (p/process-all-entities (d/db conn)
+                                 :entity.schema/ppd
+                                 {:command-map     {:entity.schema/ppd     :command/insert
+                                                    :entity.schema/address :command/insert}
+                                  :default-command :command/look-up})
+         )))
 
 
-(def structured-entities
-  (->> (process-csv (d/db conn) header path)
-       (map (fn [row] (structure-flat-data (d/db conn) :entity.schema/ppd row)))))
+;
+;
+;1000 - 4.8
+;2000 - 9.079
+;4000 - 18.602
+;389034 - 1839.396
+
+;
+
+(def process-result (time (process-csv (d/db conn) header path)))
+
+(p/get-errors-from-process-result process-result)
 
 
-(u/recursively-pull-schema (d/db conn) :entity.schema/ppd (first structured-entities))
-
-(esp/pull-entity-schema (d/db conn) :entity.schema/ppd)
+(def txs (p/get-entities-from-process-result process-result))
 
 
-
-
-
-;;TODO going to have to make the command stuff compatible with schema types.
-(p/process-all-entities (d/db conn)
-                        :entity.schema/ppd
-                        {:command-map {:entity.schema/ppd :command/insert
-                                       :entity.schema/address :command/insert}
-                         :default-command :command/look-up}
-                        structured-entities)
-
-
-
+@(d/transact conn txs)
+;
+;
+;(def txs-8000 (time (process-csv (d/db conn) header path)))
+;
+;
 
 
 

@@ -115,7 +115,7 @@
         [expanded-ref false]
         [(incorrect-ident-error unexpanded-ref) true]))))
 
-(defn validate-db-id [command-data schema db-id]
+(defn validate-db-id [command schema db-id]
   (letfn [(entity-expected-to-exist-error [natural-key-list]
             (error :error.type/entity-expected-to-exist
                    "Entity expected to exist"
@@ -125,20 +125,19 @@
             (error :error.type/entity-not-expected-to-exist
                    "Entity not expected to exist"
                    {:natural-key-list natural-key-list}))]
-    (let [command (u/get-command command-data (:db/ident schema))]
-      (if (nil? db-id)
-        ;; id not in db
-        (cond
-          (contains? #{:command/insert :command/upsert} command)
-          [db-id false]
-          (contains? #{:command/look-up :command/update} command)
-          [(entity-expected-to-exist-error (u/natural-key-coll schema [])) true])
-        ;; id in db
-        (cond
-          (contains? #{:command/insert} command)
-          [(entity-not-expected-to-exist-error (u/natural-key-coll schema [])) true]
-          (contains? #{:command/look-up :command/update :command/upsert} command)
-          [db-id false])))))
+    (if (nil? db-id)
+      ;; id not in db
+      (cond
+        (contains? #{:command/insert :command/upsert} command)
+        [db-id false]
+        (contains? #{:command/look-up :command/update} command)
+        [(entity-expected-to-exist-error (u/natural-key-coll schema [])) true])
+      ;; id in db
+      (cond
+        (contains? #{:command/insert} command)
+        [(entity-not-expected-to-exist-error (u/natural-key-coll schema [])) true]
+        (contains? #{:command/look-up :command/update :command/upsert} command)
+        [db-id false]))))
 
 
 

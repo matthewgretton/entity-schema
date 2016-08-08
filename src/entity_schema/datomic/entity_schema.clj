@@ -57,7 +57,7 @@
         (map first)
         (into #{}))))
 
-(defn derive-sub-type-id [db entity]
+(defn derive-sub-type-ident [db entity]
   "Derive the sub-type entity id from the entity"
   (:entity.schema/sub-type entity))
 
@@ -67,6 +67,7 @@
 
 (defn look-up-entity-id [db natural-key entity]
   "Look up the entity id based on the natural key and specified entity"
+  ;;TODO check to see if natural key is indexed
   (let [query-map (build-query-map db natural-key entity)
         r (d/query query-map)]
     (if (not (empty? r))

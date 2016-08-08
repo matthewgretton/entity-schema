@@ -38,6 +38,7 @@
 
 
 (defn get-new-id [id-cache entity {:keys [:db/ident :entity.schema/part] :as schema}]
+  (assert part (str "partition should be defined in schema: " schema))
   (let [natural-key-list (u/natural-key-coll schema [])
         natural-key-value-set (->> natural-key-list (map #(get entity %)) (into #{}))]
     (if-let [id (get-in id-cache [ident natural-key-value-set])]
@@ -53,7 +54,8 @@
   ([db schema command-data entity id-cache]
    (let [db-id (look-up-db-id db schema entity)
          entity-in-db? (not (nil? db-id))
-         [validated-db-id db-id-errored?] (v/validate-db-id command-data schema db-id)]
+         command (u/get-command db command-data schema entity)
+         [validated-db-id db-id-errored?] (v/validate-db-id command schema db-id)]
      (if db-id-errored?
        [entity-in-db? validated-db-id id-cache db-id-errored?]
        (if entity-in-db?
@@ -158,6 +160,21 @@
        [entity errored?]))))
 
 
+;;How do I want this to work.
+
+
+
+
+; entity -> entity.schema
+; (entity, schema) -> s
+
+; So what when we have a supertype and a sub type - Do we every need to derive?
+
+; should
+
+
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;; Process All ;;;;;;;;;
@@ -229,7 +246,9 @@
 
 
 (defn process-all-entities
-  "Returns [[entity errored?]... any-errored?] "
+  "Returns [[entity errored?]... any-errored?]
+
+  Note that entities must be reduceable to take advantage of multiple cores so a lazy seq will not take advantage"
   ([db schema-id command-data entities]
    (let [[es _ errored?]
          (r/fold combine-result
@@ -244,7 +263,11 @@
   (assert (not errored?))
   (map first entity-error-pairs))
 
-
+(defn get-errors-from-process-result [[list errored?]]
+  (if errored?
+    (->> (into [] list)
+         (filter (comp second)))
+    []))
 
 
 

@@ -24,10 +24,12 @@
      (if (empty? r) f (assoc f :list/rest (to-linked-list-entity r first-key))))))
 
 
+
+
+
 (defn build-datomic-linked-list [part actual-list]
   (merge {:db/id (d/tempid part)}
          (to-linked-list-entity actual-list)))
-
 
 
 

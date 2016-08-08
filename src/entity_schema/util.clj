@@ -30,10 +30,12 @@
     attribute")
     (if (nil? schema-id)
       (first-of-one
-        (if-let [sub-type (es/derive-sub-type-id db entity)]
+        (if-let [sub-type (es/derive-sub-type-ident db entity)]
           (es/find-entity-schema-ids db schema-type sub-type)
           (es/find-entity-schema-ids db schema-type)))
       schema-id)))
+
+
 
 (defn derive-schema
   "Derive the schema from the entity using either indirect type or direct schema link"
@@ -45,7 +47,7 @@
     attribute")
     (if (nil? schema-id)
       (first-of-one
-        (if-let [sub-type (es/derive-sub-type-id db entity)]
+        (if-let [sub-type (es/derive-sub-type-ident db entity)]
           (pull-schema-by-type db schema-type sub-type)
           (pull-schema-by-type db schema-type)))
       (es/pull-entity-schema db schema-id))))
@@ -74,10 +76,17 @@
 (defn get-value [entity {{field-ident :db/ident} :field/schema}]
   (get entity field-ident))
 
-(defn get-command [{:keys [:command-map :default-command]}
-                   entity-schema-ident]
-  (get command-map entity-schema-ident default-command))
+(defn get-command [db {:keys [:command-map :default-command]}
+                   {:keys [:db/ident :entity.schema/type] :as schema}
+                   entity]
+  (assert (or type ident) "Schema must have at least a type or db/ident defined")
+  (if (nil? ident)
+    (if-let [sub-type-ident (es/derive-sub-type-ident db entity)]
+      (get command-map [type sub-type-ident] default-command)
+      (get command-map type default-command))
+    (get command-map ident default-command)))
 
 
 (defn natural-key-coll [{:keys [:entity.schema/natural-key] :as schema} coll]
   (->> natural-key (map :db/ident) (into coll)))
+
