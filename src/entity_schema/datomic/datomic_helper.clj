@@ -5,31 +5,23 @@
   (str "datomic:mem://" db-name "-" (d/squuid)))
 
 
-(defn from-linked-list-entity
-  ([linked-list-entity]
-   (from-linked-list-entity linked-list-entity :list/first))
-  ([linked-list-entity first-key]
-   (into [] (let [f (first-key linked-list-entity)]
-              (if (contains? linked-list-entity :list/rest)
-                (cons f (from-linked-list-entity (:list/rest linked-list-entity) first-key))
-                [f])))))
+(defn to-linked-list [input]
+  (loop [values (reverse input) result {}]
+    (cond (empty? values) result
+          (empty? result) {:list/first (first values)}
+          :else (recur (rest values) {:list/first (first values)
+                                      :list/rest result}))))
 
-
-(defn to-linked-list-entity
-  ([v]
-   (to-linked-list-entity v :list/first))
-  ([v first-key]
-   (let [f {first-key (first v)}
-         r (rest v)]
-     (if (empty? r) f (assoc f :list/rest (to-linked-list-entity r first-key))))))
-
-
+(defn from-linked-list [ll]
+  (loop [result [] current ll]
+    (if (not (contains? current :list/first))
+      result
+      (recur (conj result (:list/first current)) (:list/rest current)))))
 
 
 
 (defn build-datomic-linked-list [part actual-list]
-  (merge {:db/id (d/tempid part)}
-         (to-linked-list-entity actual-list)))
+  (assoc (to-linked-list actual-list) :db/id (d/tempid part)))
 
 
 

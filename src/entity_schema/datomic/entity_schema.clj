@@ -38,7 +38,7 @@
                                            :field/nullable?]}
                    {:entity.schema/natural-key [{:list/first [:db/ident]}
                                                 {:list/rest ...}]}] entity-schema-id)
-      (update :entity.schema/natural-key dh/from-linked-list-entity)))
+      (update :entity.schema/natural-key dh/from-linked-list)))
 
 (defn find-entity-schema-ids
   "Get the entity schema id/ids for supplied type/type & sub-type"

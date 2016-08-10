@@ -7,11 +7,50 @@
             [entity-schema.datomic.entity-schema :as es]
             [entity-schema.processor :as p]
             [entity-schema.util :as u]
-            [io.rkn.conformity :as c])
+            [io.rkn.conformity :as c]
+    ; [clojure.core.async :as a :refer (>!! <! >! go-loop)]
+            [datomic.api :as d])
   (:import (java.util UUID Date)
            (java.net URI)
            (java.time.format DateTimeFormatter)
            (java.time LocalDateTime ZoneOffset)))
+
+;(defn tx-pipeline
+;  "Transacts data from from-ch. Returns a map with:
+;     :result, a return channel getting {:error t} or {:completed n}
+;     :stop, a fn you can use to terminate early."
+;  [conn conc from-ch]
+;  (let [to-ch (a/chan 100)
+;        done-ch (a/chan)
+;        transact-data (fn [data]
+;                        (try
+;                          @(d/transact-async conn data)
+;                          ; if exception in a transaction
+;                          ; will close channels and put error
+;                          ; on done channel.
+;                          (catch Throwable t
+;                            (.printStackTrace t)
+;                            (a/close! from-ch)
+;                            (a/close! to-ch)
+;                            (>!! done-ch {:error t}))))]
+;
+;    ; go block prints a '.' after every 1000 transactions, puts completed
+;    ; report on done channel when no value left to be taken.
+;    (go-loop [total 0]
+;             (when (zero? (mod total 1000))
+;               (print ".") (flush))
+;             (if-let [c (<! to-ch)]
+;               (recur (inc total))
+;               (>! done-ch {:completed total})))
+;
+;    ; pipeline that uses transducer form of map to transact data taken from
+;    ; from-ch and puts results on to-ch
+;    (a/pipeline-blocking conc to-ch (map transact-data) from-ch)
+;
+;    ; returns done channel and a function that you can use
+;    ; for early termination.
+;    {:result done-ch
+;     :stop (fn [] (a/close! to-ch))}))
 
 
 (require '[datomic.api :as d])
@@ -588,37 +627,36 @@
   (with-open [in-file (io/reader csv-path)]
     (->> (csv/read-csv in-file)
          (process-data db header)
-
          (structure-rows db :entity.schema/ppd)
-         (take 10000)
+         ;(take 32000)
          (into [])
          ;;TODO going to have to make the command stuff compatible with schema types.
          (p/process-all-entities (d/db conn)
                                  :entity.schema/ppd
                                  {:command-map     {:entity.schema/ppd     :command/insert
                                                     :entity.schema/address :command/insert}
-                                  :default-command :command/look-up})
-         )))
+                                  :default-command :command/look-up}))))
+
+
 
 
 ;
 ;
-;1000 - 4.8
-;2000 - 9.079
-;4000 - 18.602
+; 16000 -> 48722
+; 32000 ->
 ;389034 - 1839.396
 
 ;
 
 (def process-result (time (process-csv (d/db conn) header path)))
 
-(p/get-errors-from-process-result process-result)
+;(p/get-errors-from-process-result process-result)
 
 
-(def txs (p/get-entities-from-process-result process-result))
+;(def txs (p/get-entities-from-process-result process-result))
 
 
-@(d/transact conn txs)
+;@(d/transact conn txs)
 ;
 ;
 ;(def txs-8000 (time (process-csv (d/db conn) header path)))
