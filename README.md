@@ -2,6 +2,34 @@
 
 Small example app to demonstrate storing entity schema data in a database, and using that information for validation purposes. Also demonstrates how versioning can be easliy implemented to ensure validation is consistent historically.
 
+# Usage
+
+Schema Example:
+
+```clojure
+{:db/ident                  :entity.schema/test-entity
+ :entity.schema/type        :entity.schema.type/test-entity
+ :entity.schema/fields      #{{:field/schema    {:db/ident       :test-entity/field1
+                                                 :db/ValueType   {:db/ident :db.type/string}
+                                                 :db/cardinality {:db/ident :db.cardinality/one}}
+                               :field/nullable? false}
+
+                              {:field/schema             {:db/ident       :test-entity/ref-entity
+                                                          :db/ValueType   {:db/ident :db.type/ref}
+                                                          :db/cardinality {:db/ident :db.cardinality/one}}
+                               :field/entity-schema-type :entity.schema.type/blah
+                               :field/nullable?          false}}
+ :entity.schema/natural-key [:test/field1]}
+```
+
+Entity Example
+
+```clojure
+{:entity.schema/type     :entity.schema.type/test-entity
+ :entity.schema.sub-type :entity.schema.sub-type/blah
+ :test-entity/field1     "Bob"}
+```
+
 # Installation
 
 To pull down Datomic dependencies you need to read from a private repository. This requires authentication credentials. 
