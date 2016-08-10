@@ -34,7 +34,7 @@
                                                            {:db/cardinality [:db/ident]}
                                                            {:db/valueType [:db/ident]}]}
                                            {:field/entity-schema-type [:db/ident]
-                                            :field/entity-schema [:db/ident]}
+                                            :field/entity-schema      [:db/ident]}
                                            :field/nullable?]}
                    {:entity.schema/natural-key [{:list/first [:db/ident]}
                                                 {:list/rest ...}]}] entity-schema-id)
@@ -67,17 +67,22 @@
 
 (defn look-up-entity-id [db natural-key entity]
   "Look up the entity id based on the natural key and specified entity"
-  ;;TODO check to see if natural key is indexed
-  (let [query-map (build-query-map db natural-key entity)
-        r (d/query query-map)]
-    (if (not (empty? r))
-      (do (assert (= 1 (count r)) (str "Query result should only return one result \n"
-                                       "natural-key:\n" (with-out-str (clojure.pprint/pprint natural-key)) "\n"
-                                       "entity:\n" (with-out-str (clojure.pprint/pprint entity)) "\n"
-                                       "query-map\n" (with-out-str (clojure.pprint/pprint query-map)) "\n"
-                                       "result:\n" (with-out-str (clojure.pprint/pprint r))))
+  (assert (dh/all-indexed? db natural-key) (str "All natural key attributes should be indexed " natural-key))
+  (if (= (count natural-key) 1)
+    (let [key (first natural-key)
+          value (get entity key)]
+      (assert value "Value should not be null")
+      (:db/id (d/pull db [:db/id] [key value])))
+    (let [query-map (build-query-map db natural-key entity)
+          r (d/query query-map)]
+      (if (not (empty? r))
+        (do (assert (= 1 (count r)) (str "Query result should only return one result \n"
+                                         "natural-key:\n" (with-out-str (clojure.pprint/pprint natural-key)) "\n"
+                                         "entity:\n" (with-out-str (clojure.pprint/pprint entity)) "\n"
+                                         "query-map\n" (with-out-str (clojure.pprint/pprint query-map)) "\n"
+                                         "result:\n" (with-out-str (clojure.pprint/pprint r))))
 
-          (->> r (first) (first))))))
+            (->> r (first) (first)))))))
 
 (defn transact-entities [conn tx-data]
   (d/transact conn tx-data))

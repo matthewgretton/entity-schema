@@ -100,9 +100,8 @@
 
 
 
-
-
-(defn to-datomic [{:keys [:db/ident :entity.schema/fields :entity.schema/natural-key :entity.schema/part]}]
+(defn to-datomic [db {:keys [:db/ident :entity.schema/fields :entity.schema/natural-key :entity.schema/part]}]
+  (assert (dh/all-indexed? db natural-key) (str "All natural key attributes should be indexed " natural-key))
   {:db/id                     (d/tempid :db.part/entity-schema)
    :db/ident                  ident
    :entity.schema/part        part
@@ -111,6 +110,11 @@
                                    (into #{}))
    :entity.schema/natural-key (dh/build-datomic-linked-list part natural-key)
    })
+
+
+
+(dh/build-datomic-linked-list :db.part/entity-schema
+                              [:address/postcode :address/PAON :address/SAON :address/street])
 
 (defn enum-with-code-schema [entity-type part]
   {:db/ident                  (keyword "entity.schema" entity-type)
@@ -132,6 +136,7 @@
       (let [schema (u/derive-schema db field flat-data)]
         (structure-row db (:db/ident schema) flat-data))
       (get flat-data ident))))
+
 
 
 (defn structure-row [db schema-id flat-data]
@@ -310,6 +315,7 @@
                            Note that Land Registry does not record leases of 7 years or less in the Price Paid Dataset."
     :db/valueType          :db.type/string
     :db/cardinality        :db.cardinality/one
+    :db/unique             :db.unique/identity
     :db.install/_attribute :db.part/db
     }
 
@@ -362,6 +368,7 @@
     :db/ident              :address/street
     :db/valueType          :db.type/string
     :db/cardinality        :db.cardinality/one
+    :db/index true
     :db.install/_attribute :db.part/db
     }
 
@@ -603,17 +610,97 @@
 
 @(d/transact conn esd/all-fields)
 
+
+
+
+
+(def enum-schema
+  {:db/id                     (d/tempid :db.part/entity-schema)
+   :db/ident                  :entity.schema/enum
+   :entity.schema/part        :db.part/entity-schema
+   :entity.schema/fields      #{{:field/schema    :db/ident
+                                 :field/nullable? false}}
+   :entity.schema/natural-key [:db/ident]})
+
+(def datomic-field-schema
+  {:db/id                (d/tempid :db.part/entity-schema)
+   :db/ident             :entity.schema/datomic-field
+   :entity.schema/part   :db.part/entity-schema
+   :entity.schema/fields #{
+                           {:db/id                (d/tempid :db.part/entity-schema)
+                            :field/schema    :db/ident
+                            :field/nullable? false}
+
+                           {:db/id                (d/tempid :db.part/entity-schema)
+                            :field/schema        :db/valueType
+                            :field/entity-schema enum-schema
+                            :field/nullable?     false}
+
+                           {:db/id                (d/tempid :db.part/entity-schema)
+                            :field/schema        :db/cardinality
+                            :field/entity-schema enum-schema
+                            :field/nullable?     false}
+
+                           {:db/id                (d/tempid :db.part/entity-schema)
+                            :field/schema        :db/index
+                            :field/nullable?     true}
+
+                           {:db/id                (d/tempid :db.part/entity-schema)
+                            :field/schema        :db/unique
+                            :field/entity-schema enum-schema
+                            :field/nullable?     true}
+                           }
+   })
+
+
+
+(def field-schema
+  {:db/ident                  :entity.schema/field
+   :entity.schema/fields      #{{:field/schema        :field/schema
+                                 :field/entity-schema {}
+                                 :field/nullable?     false}
+                                {:field/schema    :field/nullable?
+                                 :field/nullable? false}}
+   :entity.schema/natural-key []})
+
+
+(def entity-schema-schema
+  )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @(d/transact conn enum-data)
 
 (def enum-schemas
   (->> ["age" "duration" "record-status" "category-type" "property-type"]
-       (map (fn [x] (to-datomic (enum-with-code-schema x :db.part/user))))))
+       (map (fn [x] (to-datomic (d/db conn) (enum-with-code-schema x :db.part/user))))))
 
 @(d/transact conn enum-schemas)
 
-@(d/transact conn [(to-datomic address-schema)])
+@(d/transact conn [(to-datomic (d/db conn) address-schema)])
 
-@(d/transact conn [(to-datomic ppd-schema)])
+
+@(d/transact conn [(to-datomic (d/db conn) ppd-schema)])
+
 
 
 
@@ -628,7 +715,6 @@
     (->> (csv/read-csv in-file)
          (process-data db header)
          (structure-rows db :entity.schema/ppd)
-         ;(take 32000)
          (into [])
          ;;TODO going to have to make the command stuff compatible with schema types.
          (p/process-all-entities (d/db conn)
@@ -648,10 +734,11 @@
 
 ;
 
+
 (def process-result (time (process-csv (d/db conn) header path)))
-
-;(p/get-errors-from-process-result process-result)
-
+;
+(first (p/get-entities-from-process-result process-result))
+;
 
 ;(def txs (p/get-entities-from-process-result process-result))
 

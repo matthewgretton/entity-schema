@@ -25,12 +25,6 @@
   ([id-cache ident natural-key-value-set id]
    (merge-id-caches id-cache {ident {natural-key-value-set id}})))
 
-
-
-
-
-
-
 (defn look-up-db-id [db schema entity]
   "let's get this to return [id in-db?]"
   (let [natural-key-list (u/natural-key-coll schema [])]

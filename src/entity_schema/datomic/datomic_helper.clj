@@ -7,10 +7,11 @@
 
 (defn to-linked-list [input]
   (loop [values (reverse input) result {}]
-    (cond (empty? values) result
-          (empty? result) {:list/first (first values)}
-          :else (recur (rest values) {:list/first (first values)
-                                      :list/rest result}))))
+    (if (empty? values)
+      result
+      (let [stub {:list/first (first values)}
+            new-result (if (empty? result) stub (assoc stub :list/rest result))]
+        (recur (rest values) new-result)))))
 
 (defn from-linked-list [ll]
   (loop [result [] current ll]
@@ -18,12 +19,15 @@
       result
       (recur (conj result (:list/first current)) (:list/rest current)))))
 
+(defn index? [db att-id]
+   (let [{:keys [:db/index :db/unique]} (d/pull db [:db/index :db/unique] att-id)]
+     (or index unique)))
 
+(defn all-indexed? [db atts]
+  (every? (partial index? db) atts))
 
 (defn build-datomic-linked-list [part actual-list]
   (assoc (to-linked-list actual-list) :db/id (d/tempid part)))
-
-
 
 
 (defn maybe-assoc [m k v]
