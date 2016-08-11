@@ -8,20 +8,24 @@ Schema Example:
 
 ```clojure
 {:db/ident                  :entity.schema/customer
- :entity.schema/fields      #{{:field/schema    :customer/name}
+ :entity.schema/fields      #{
+                              {:field/schema    :customer/name}
                                :field/nullable? false}
 
                               {:field/schema             :customer/age}
-                               :field/nullable?          true}}
+                               :field/nullable?          true}
+                             }
  :entity.schema/natural-key [:customer/name]}
 
 {:db/ident                  :entity.schema/order
- :entity.schema/fields      #{{:field/schema    :order/item-name}
+ :entity.schema/fields      #{
+                              {:field/schema    :order/item-name}
                                :field/nullable? false}
 
                               {:field/schema             :order/customer}
                                :field/entity-schema      :entity.schema/customer
-                               :field/nullable?          false}}
+                               :field/nullable?          false}
+                             }
  :entity.schema/natural-key [:order/customer order/item-name]}
 ```
 
