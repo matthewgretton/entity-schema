@@ -9,11 +9,14 @@
             [entity-schema.util :as u]
             [io.rkn.conformity :as c]
     ; [clojure.core.async :as a :refer (>!! <! >! go-loop)]
-            [datomic.api :as d])
+            [datomic.api :as d]
+            [clojure.core.reducers :as r])
   (:import (java.util UUID Date)
            (java.net URI)
            (java.time.format DateTimeFormatter)
            (java.time LocalDateTime ZoneOffset)))
+
+
 
 ;(defn tx-pipeline
 ;  "Transacts data from from-ch. Returns a map with:
@@ -148,7 +151,8 @@
        (into {})))
 
 (defn structure-rows [db scheam-id data]
-  (map (fn [row] (structure-row db scheam-id row)) data))
+  (r/foldcat (r/map (fn [row] (structure-row db scheam-id row)) data)))
+
 
 
 
@@ -713,7 +717,9 @@
 (defn process-csv [db header csv-path]
   (with-open [in-file (io/reader csv-path)]
     (->> (csv/read-csv in-file)
+         (take 4000)
          (process-data db header)
+         (into [])
          (structure-rows db :entity.schema/ppd)
          (into [])
          ;;TODO going to have to make the command stuff compatible with schema types.
@@ -730,14 +736,14 @@
 ;
 ; 16000 -> 48722
 ; 32000 ->
-;389034 - 1839.396
+; 389034 - 1839.396
 
 ;
 
 
 (def process-result (time (process-csv (d/db conn) header path)))
 ;
-(first (p/get-entities-from-process-result process-result))
+;(first (p/get-entities-from-process-result process-result))
 ;
 
 ;(def txs (p/get-entities-from-process-result process-result))
