@@ -7,15 +7,22 @@ Small example app to demonstrate storing entity schema data in a database, and u
 Schema Example:
 
 ```clojure
-{:db/ident                  :entity.schema/entity1
- :entity.schema/type        :entity.schema.type/entity1
- :entity.schema/fields      #{{:field/schema    :entity1/string-field}
+{:db/ident                  :entity.schema/customer
+ :entity.schema/fields      #{{:field/schema    :customer/name}
                                :field/nullable? false}
 
-                              {:field/schema             :entity1/entity2}
-                               :field/entity-schema      :entity.schema/entity2
+                              {:field/schema             :customer/age}
+                               :field/nullable?          true}}
+ :entity.schema/natural-key [:customer/name]}
+
+{:db/ident                  :entity.schema/order
+ :entity.schema/fields      #{{:field/schema    :order/item-name}
+                               :field/nullable? false}
+
+                              {:field/schema             :order/customer}
+                               :field/entity-schema      :entity.schema/customer
                                :field/nullable?          false}}
- :entity.schema/natural-key [:test/string-field]}
+ :entity.schema/natural-key [:order/customer order/item-name]}
 ```
 
 Entity Example
