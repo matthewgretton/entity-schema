@@ -32,8 +32,9 @@ Schema Example:
 Entity Example
 
 ```clojure
-{:test-entity/ref-field {:entity2/double-field 10.0}
- :test-entity/string-field     "Bob"}
+{:order/customer {:customer/name "Peter Parker"
+                  :customer/age 25}
+ :order/item     "Spiderman Outfit"}
 ```
 
 # Installation
