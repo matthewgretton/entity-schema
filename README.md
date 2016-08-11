@@ -7,27 +7,34 @@ Small example app to demonstrate storing entity schema data in a database, and u
 Schema Example:
 
 ```clojure
-{:db/ident                  :entity.schema/test-entity
- :entity.schema/type        :entity.schema.type/test-entity
- :entity.schema/fields      #{{:field/schema    {:db/ident       :test-entity/field1
-                                                 :db/ValueType   {:db/ident :db.type/string}
-                                                 :db/cardinality {:db/ident :db.cardinality/one}}
+{:db/ident                  :entity.schema/customer
+ :entity.schema/fields      #{
+                              {:field/schema    :customer/name}
                                :field/nullable? false}
 
-                              {:field/schema             {:db/ident       :test-entity/ref-entity
-                                                          :db/ValueType   {:db/ident :db.type/ref}
-                                                          :db/cardinality {:db/ident :db.cardinality/one}}
-                               :field/entity-schema-type :entity.schema.type/blah
-                               :field/nullable?          false}}
- :entity.schema/natural-key [:test/field1]}
+                              {:field/schema             :customer/age}
+                               :field/nullable?          true}
+                             }
+ :entity.schema/natural-key [:customer/name]}
+
+{:db/ident                  :entity.schema/order
+ :entity.schema/fields      #{
+                              {:field/schema    :order/item-name}
+                               :field/nullable? false}
+
+                              {:field/schema             :order/customer}
+                               :field/entity-schema      :entity.schema/customer
+                               :field/nullable?          false}
+                             }
+ :entity.schema/natural-key [:order/customer :order/item-name]}
 ```
 
 Entity Example
 
 ```clojure
-{:entity.schema/type     :entity.schema.type/test-entity
- :entity.schema.sub-type :entity.schema.sub-type/blah
- :test-entity/field1     "Bob"}
+{:order/customer {:customer/name "Peter Parker"
+                  :customer/age 25}
+ :order/item     "Spiderman Outfit"}
 ```
 
 # Installation
