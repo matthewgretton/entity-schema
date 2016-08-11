@@ -26,7 +26,7 @@ Schema Example:
                                :field/entity-schema      :entity.schema/customer
                                :field/nullable?          false}
                              }
- :entity.schema/natural-key [:order/customer order/item-name]}
+ :entity.schema/natural-key [:order/customer :order/item-name]}
 ```
 
 Entity Example
