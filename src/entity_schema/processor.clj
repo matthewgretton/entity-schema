@@ -8,8 +8,9 @@
   (if (nil? value) map (assoc map key value)))
 
 (defn ref-identifier-type? [value]
-  "Does Is the value of an identifier to an entity? "
-  (some (fn [t] (isa? (class value) t)) v/ref-identifier-types))
+  "Is the value of an identifier to an entity? "
+
+  (contains? v/ref-identifier-types (class value)))
 
 (defn expand-ref [db unexpanded-ref]
   (es/pull-entity-schema db unexpanded-ref))
@@ -48,7 +49,7 @@
   ([db schema command-data entity id-cache]
    (let [db-id (look-up-db-id db schema entity)
          entity-in-db? (not (nil? db-id))
-         command (u/get-command db command-data schema entity)
+         command (u/get-command command-data schema)
          [validated-db-id db-id-errored?] (v/validate-db-id command schema db-id)]
      (if db-id-errored?
        [entity-in-db? validated-db-id id-cache db-id-errored?]
@@ -67,9 +68,7 @@
                                            [value false])]
     (if expand-errored?
       [value id-cache false]
-      (let [schema (u/derive-schema db field expanded-value)
-            processed-entity (process-entity db schema command-data expanded-value id-cache)]
-        processed-entity))))
+      (process-entity db (:field/entity-schema field) command-data expanded-value id-cache))))
 
 (defn process-valid-value [db command-data field value id-cache]
   (if (u/ref-field? field)
@@ -131,7 +130,8 @@
    (assert (not (nil? fields)))
    (let [natural-key-set (u/natural-key-coll schema #{})
          [key-fields non-key-fields] (split-fields-by-natural-key fields natural-key-set)
-         [key-field-entity key-field-id-cache key-fields-errored?] (process-fields db false command-data entity id-cache key-fields)]
+         [key-field-entity key-field-id-cache key-fields-errored?]
+         (process-fields db false command-data entity id-cache key-fields)]
 
      (if key-fields-errored?
        [key-field-entity key-field-id-cache key-fields-errored?]
@@ -141,17 +141,10 @@
          (if db-id-error?
            [upd-key-field-entity upd-key-field-id-cache db-id-error?]
 
-           (let [[non-key-field-entity non-key-id-cache non-key-fields-errored?] (process-fields db
-                                                                                                 entity-in-db?
-                                                                                                 command-data
-                                                                                                 entity upd-key-field-id-cache non-key-fields)
+           (let [[non-key-field-entity non-key-id-cache non-key-fields-errored?]
+                 (process-fields db entity-in-db? command-data entity upd-key-field-id-cache non-key-fields)
                  merged-entity (merge upd-key-field-entity non-key-field-entity)]
-             [merged-entity non-key-id-cache non-key-fields-errored?]))))))
-
-  ([db schema-type command-data entity]
-   (let [schema (u/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)]
-     (let [[entity _ errored?] (process-entity db schema command-data entity {})]
-       [entity errored?]))))
+             [merged-entity non-key-id-cache non-key-fields-errored?])))))))
 
 
 ;;How do I want this to work.
@@ -243,12 +236,11 @@
   "Returns [[entity errored?]... any-errored?]
 
   Note that entities must be reduceable to take advantage of multiple cores so a lazy seq will not take advantage"
-  ([db schema-id command-data entities]
+  ([db schema command-data entities]
    (let [[es _ errored?]
          (r/fold combine-result
                  (fn [[es id-cache current-errored?] entity]
-                   (let [schema (es/pull-entity-schema db schema-id)
-                         [processed-entity updated-id-cache errored?] (process-entity db schema command-data entity id-cache)]
+                   (let [[processed-entity updated-id-cache errored?] (process-entity db schema command-data entity id-cache)]
                      [(conj es [processed-entity errored?]) updated-id-cache (or current-errored? errored?)]))
                  entities)]
      [es errored?])))

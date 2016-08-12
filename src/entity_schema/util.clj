@@ -76,14 +76,11 @@
 (defn get-value [entity {{field-ident :db/ident} :field/schema}]
   (get entity field-ident))
 
-(defn get-command [db {:keys [:command-map :default-command]}
-                   {:keys [:db/ident :entity.schema/type] :as schema}
-                   entity]
+(defn get-command [{:keys [:command-map :default-command]}
+                   {:keys [:db/ident :entity.schema/type] :as schema}]
   (assert (or type ident) "Schema must have at least a type or db/ident defined")
   (if (nil? ident)
-    (if-let [sub-type-ident (es/derive-sub-type-ident db entity)]
-      (get command-map [type sub-type-ident] default-command)
-      (get command-map type default-command))
+    (get command-map type default-command)
     (get command-map ident default-command)))
 
 

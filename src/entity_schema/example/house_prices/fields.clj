@@ -130,95 +130,6 @@
    :entity.schema/natural-key [(keyword entity-type "code")]})
 
 
-(declare structure-row)
-
-(defn get-field-value [db field flat-data]
-  (let [ident (get-in field [:field/schema :db/ident])
-        type (get-in field [:field/schema :db/valueType :db/ident])]
-    (if (= type :db.type/ref)
-      (let [schema (u/derive-schema db field flat-data)]
-        (structure-row db (:db/ident schema) flat-data))
-      (get flat-data ident))))
-
-
-
-(defn structure-row [db schema-id flat-data]
-  (->> (es/pull-entity-schema db schema-id)
-       (:entity.schema/fields)
-       (map (fn [f]
-              [(get-in f [:field/schema :db/ident]) (get-field-value db f flat-data)]))
-       (filter (comp not nil? second))
-       (into {})))
-
-(defn structure-rows [db scheam-id data]
-  (r/foldcat (r/map (fn [row] (structure-row db scheam-id row)) data)))
-
-
-
-
-
-
-
-(def path "/Users/matthewgretton/Documents/Projects/entity-schema/src/entity_schema/example/house_prices/pp-2016.csv")
-
-(defn toDate [ldt]
-  (Date/from (.toInstant (.atZone ldt (ZoneOffset/UTC)))))
-
-
-
-(def type-functions
-  {
-   :db.type/keyword keyword
-   :db.type/string  identity
-   :db.type/boolean #(Boolean/valueOf %)
-   :db.type/long    #(Long/valueOf %)
-   :db.type/bigint  #(BigInteger/valueOf (Long/valueOf %))
-   :db.type/float   #(Float/valueOf %)
-   :db.type/double  #(Double/valueOf ^String %)
-   :db.type/bigdec  #(BigDecimal/valueOf (Double/valueOf %))
-   :db.type/instant #(toDate (LocalDateTime/parse % (DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm")))
-   :db.type/uuid    #(UUID/fromString %)
-   :db.type/uri     #(URI/create %)})
-
-
-
-
-(def header
-  [:ppd/transaction-unique-identifier
-   :ppd/price
-   :ppd/date-of-transfer
-   :address/postcode
-   :property-type/code
-   :age/code
-   :duration/code
-   :address/PAON
-   :address/SAON
-   :address/street
-   :address/locality
-   :address/town_or_city
-   :address/district
-   :address/county
-   :category-type/code
-   :record-status/code])
-
-
-(defn get-funcs [db header]
-  (->> header
-       (map (fn [ident] (d/pull db [{:db/valueType [:db/ident]}] ident)))
-       (map (fn [field] (get type-functions (get-in field [:db/valueType :db/ident]))))
-       (into [])))
-
-(defn transfrom-row [header-functions row]
-  (->> (map vector header-functions row)
-       (map (fn [[f v]]
-              (f v)))
-       (into [])))
-
-(defn transform-csv [db header data]
-  (let [funcs (get-funcs db header)]
-    (->> data
-         (map (fn [row] (transfrom-row funcs row))))))
-
 
 
 (def fields
@@ -372,7 +283,7 @@
     :db/ident              :address/street
     :db/valueType          :db.type/string
     :db/cardinality        :db.cardinality/one
-    :db/index true
+    :db/index              true
     :db.install/_attribute :db.part/db
     }
 
@@ -631,25 +542,25 @@
    :db/ident             :entity.schema/datomic-field
    :entity.schema/part   :db.part/entity-schema
    :entity.schema/fields #{
-                           {:db/id                (d/tempid :db.part/entity-schema)
+                           {:db/id           (d/tempid :db.part/entity-schema)
                             :field/schema    :db/ident
                             :field/nullable? false}
 
-                           {:db/id                (d/tempid :db.part/entity-schema)
+                           {:db/id               (d/tempid :db.part/entity-schema)
                             :field/schema        :db/valueType
                             :field/entity-schema enum-schema
                             :field/nullable?     false}
 
-                           {:db/id                (d/tempid :db.part/entity-schema)
+                           {:db/id               (d/tempid :db.part/entity-schema)
                             :field/schema        :db/cardinality
                             :field/entity-schema enum-schema
                             :field/nullable?     false}
 
-                           {:db/id                (d/tempid :db.part/entity-schema)
-                            :field/schema        :db/index
-                            :field/nullable?     true}
+                           {:db/id           (d/tempid :db.part/entity-schema)
+                            :field/schema    :db/index
+                            :field/nullable? true}
 
-                           {:db/id                (d/tempid :db.part/entity-schema)
+                           {:db/id               (d/tempid :db.part/entity-schema)
                             :field/schema        :db/unique
                             :field/entity-schema enum-schema
                             :field/nullable?     true}
@@ -708,40 +619,142 @@
 
 
 
-(defn process-data [db header data]
-  (->> data
-       (transform-csv db header)
-       (map #(zipmap header %))))
 
 
-(defn process-csv [db header csv-path]
-  (with-open [in-file (io/reader csv-path)]
+
+
+
+
+
+
+
+(def path "/Users/matthewgretton/Documents/Projects/entity-schema/src/entity_schema/example/house_prices/pp-2016.csv")
+
+(defn toDate [ldt]
+  (Date/from (.toInstant (.atZone ldt (ZoneOffset/UTC)))))
+
+
+
+(def type-functions
+  {
+   :db.type/keyword keyword
+   :db.type/string  identity
+   :db.type/boolean #(Boolean/valueOf %)
+   :db.type/long    #(Long/valueOf %)
+   :db.type/bigint  #(BigInteger/valueOf (Long/valueOf %))
+   :db.type/float   #(Float/valueOf %)
+   :db.type/double  #(Double/valueOf ^String %)
+   :db.type/bigdec  #(BigDecimal/valueOf (Double/valueOf %))
+   :db.type/instant #(toDate (LocalDateTime/parse % (DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm")))
+   :db.type/uuid    #(UUID/fromString %)
+   :db.type/uri     #(URI/create %)})
+
+
+
+
+(def header
+  [:ppd/transaction-unique-identifier
+   :ppd/price
+   :ppd/date-of-transfer
+   :address/postcode
+   :property-type/code
+   :age/code
+   :duration/code
+   :address/PAON
+   :address/SAON
+   :address/street
+   :address/locality
+   :address/town_or_city
+   :address/district
+   :address/county
+   :category-type/code
+   :record-status/code])
+
+
+(defn build-key-func-pairs [db header type-functions]
+  (->> header
+       (map (fn [ident]
+              (let [type (get-in (d/pull db [{:db/valueType [:db/ident]}] ident) [:db/valueType :db/ident])
+                    func (get type-functions type)]
+                [ident func])))
+       (into [])))
+
+
+
+(defn transform-csv-row [key-function-pairs row]
+  (clojure.pprint/pprint "Bo!")
+  (->> (map vector key-function-pairs row)
+       (map (fn [[[k f] v]]
+              [k (f v)]))
+       (into {})))
+
+(defn read-csv-into-vector [path]
+  (with-open [in-file (io/reader path)]
     (->> (csv/read-csv in-file)
-         (take 4000)
-         (process-data db header)
-         (into [])
-         (structure-rows db :entity.schema/ppd)
-         (into [])
-         ;;TODO going to have to make the command stuff compatible with schema types.
-         (p/process-all-entities (d/db conn)
-                                 :entity.schema/ppd
-                                 {:command-map     {:entity.schema/ppd     :command/insert
-                                                    :entity.schema/address :command/insert}
-                                  :default-command :command/look-up}))))
+         (into []))))
+
+(defn build-flat-data [db header grid-data]
+  (let [pairs (build-key-func-pairs db header type-functions)]
+    (->> grid-data
+         (map (partial transform-csv-row pairs))
+         (into []))))
+
+(declare structure-row)
+
+(defn get-field-value [db field flat-data]
+  (let [ident (get-in field [:field/schema :db/ident])
+        type (get-in field [:field/schema :db/valueType :db/ident])]
+    (if (= type :db.type/ref)
+      (structure-row db (:field/entity-schema field) flat-data)
+      (get flat-data ident))))
+
+(defn structure-row [db schema flat-data]
+  (clojure.pprint/pprint "Bob")
+  (->> (:entity.schema/fields schema)
+       (map (fn [f]
+              [(get-in f [:field/schema :db/ident]) (get-field-value db f flat-data)]))
+       (filter (comp not nil? second))
+       (into {})))
+
+(defn process-csv [db flat-data schema]
+  (->> flat-data
+       (take 4000)
+       (map (partial structure-row db schema))
+       (into [])
+       (p/process-all-entities (d/db conn)
+                               schema
+                               {:command-map     {:entity.schema/ppd     :command/insert
+                                                  :entity.schema/address :command/insert}
+                                :default-command :command/look-up})))
+
 
 
 
 
 ;
-;
-; 16000 -> 48722
-; 32000 ->
-; 389034 - 1839.396
-
+; 128 -> 184
+; 200 - 1839.396
 ;
 
+(def csv-data (read-csv-into-vector path))
 
-(def process-result (time (process-csv (d/db conn) header path)))
+
+
+(defn xf [db schema-id grid-data]
+  (let [pairs (build-key-func-pairs db header type-functions)
+        schema (u/recursively-pull-schema (d/db conn) schema-id {})]
+    (comp (r/map (partial transform-csv-row pairs) grid-data)
+          (r/map (partial structure-row db schema) grid-data))))
+
+
+(def structured-data (r/foldcat (xf (d/db conn) :entity.schema/ppd csv-data)))
+
+(def flat-data (build-flat-data (d/db conn) header csv-data))
+
+(def schema (u/recursively-pull-schema (d/db conn) :entity.schema/ppd {}))
+
+(clojure.pprint/pprint "Go go go")
+;(def process-result (time (process-csv (d/db conn) flat-data schema)))
 ;
 ;(first (p/get-entities-from-process-result process-result))
 ;

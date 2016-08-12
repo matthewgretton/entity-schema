@@ -67,7 +67,7 @@
 
 (defn look-up-entity-id [db natural-key entity]
   "Look up the entity id based on the natural key and specified entity"
-  (assert (dh/all-indexed? db natural-key) (str "All natural key attributes should be indexed " natural-key))
+  ;(assert (dh/all-indexed? db natural-key) (str "All natural key attributes should be indexed " natural-key))
   (if (= (count natural-key) 1)
     (let [key (first natural-key)
           value (get entity key)]
