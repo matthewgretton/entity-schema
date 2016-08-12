@@ -628,7 +628,7 @@
 
 
 
-(def path "/Users/matthewgretton/Documents/Projects/entity-schema/src/entity_schema/example/house_prices/pp-2016.csv")
+(def path "/Users/mgretton/Code/entity-schema/src/entity_schema/example/house_prices/pp-2016.csv")
 
 (defn toDate [ldt]
   (Date/from (.toInstant (.atZone ldt (ZoneOffset/UTC)))))
@@ -682,7 +682,6 @@
 
 
 (defn transform-csv-row [key-function-pairs row]
-  (clojure.pprint/pprint "Bo!")
   (->> (map vector key-function-pairs row)
        (map (fn [[[k f] v]]
               [k (f v)]))
@@ -709,7 +708,6 @@
       (get flat-data ident))))
 
 (defn structure-row [db schema flat-data]
-  (clojure.pprint/pprint "Bob")
   (->> (:entity.schema/fields schema)
        (map (fn [f]
               [(get-in f [:field/schema :db/ident]) (get-field-value db f flat-data)]))
@@ -727,10 +725,6 @@
                                                   :entity.schema/address :command/insert}
                                 :default-command :command/look-up})))
 
-
-
-
-
 ;
 ; 128 -> 184
 ; 200 - 1839.396
@@ -739,21 +733,25 @@
 (def csv-data (read-csv-into-vector path))
 
 
-
-(defn xf [db schema-id grid-data]
-  (let [pairs (build-key-func-pairs db header type-functions)
+(defn red [db grid-data]
+  (let [schema-id :entity.schema/ppd
+        pairs (build-key-func-pairs db header type-functions)
         schema (u/recursively-pull-schema (d/db conn) schema-id {})]
-    (comp (r/map (partial transform-csv-row pairs) grid-data)
-          (r/map (partial structure-row db schema) grid-data))))
+    (->> grid-data
+         (r/map (partial transform-csv-row pairs))
+         (r/map (partial structure-row db schema)))))
+
+(def bob (time (r/foldcat (red (d/db conn) csv-data))))
 
 
-(def structured-data (r/foldcat (xf (d/db conn) :entity.schema/ppd csv-data)))
-
-(def flat-data (build-flat-data (d/db conn) header csv-data))
-
-(def schema (u/recursively-pull-schema (d/db conn) :entity.schema/ppd {}))
-
-(clojure.pprint/pprint "Go go go")
+;
+;(def structured-data (r/foldcat (xf (d/db conn) :entity.schema/ppd csv-data)))
+;
+;(def flat-data (build-flat-data (d/db conn) header csv-data))
+;
+;(def schema (u/recursively-pull-schema (d/db conn) :entity.schema/ppd {}))
+;
+;(clojure.pprint/pprint "Go go go")
 ;(def process-result (time (process-csv (d/db conn) flat-data schema)))
 ;
 ;(first (p/get-entities-from-process-result process-result))
