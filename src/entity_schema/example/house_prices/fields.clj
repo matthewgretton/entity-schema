@@ -528,7 +528,6 @@
 
 
 
-
 (def enum-schema
   {:db/id                     (d/tempid :db.part/entity-schema)
    :db/ident                  :entity.schema/enum
@@ -635,56 +634,35 @@
 
 
 
-(def type-functions
-  {
-   :db.type/keyword keyword
-   :db.type/string  identity
-   :db.type/boolean #(Boolean/valueOf %)
-   :db.type/long    #(Long/valueOf %)
-   :db.type/bigint  #(BigInteger/valueOf (Long/valueOf %))
-   :db.type/float   #(Float/valueOf %)
-   :db.type/double  #(Double/valueOf ^String %)
-   :db.type/bigdec  #(BigDecimal/valueOf (Double/valueOf %))
-   :db.type/instant #(toDate (LocalDateTime/parse % (DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm")))
-   :db.type/uuid    #(UUID/fromString %)
-   :db.type/uri     #(URI/create %)})
 
 
 
+(defn build-key-func-pairs [db header]
+  (let [type-functions {:db.type/keyword keyword
+                        :db.type/string  identity
+                        :db.type/boolean #(Boolean/valueOf %)
+                        :db.type/long    #(Long/valueOf %)
+                        :db.type/bigint  #(BigInteger/valueOf (Long/valueOf %))
+                        :db.type/float   #(Float/valueOf %)
+                        :db.type/double  #(Double/valueOf ^String %)
+                        :db.type/bigdec  #(BigDecimal/valueOf (Double/valueOf %))
+                        :db.type/instant #(toDate (LocalDateTime/parse % (DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm")))
+                        :db.type/uuid    #(UUID/fromString %)
+                        :db.type/uri     #(URI/create %)}]
+    (->> header
+         (map (fn [ident]
+                (let [type (get-in (d/pull db [{:db/valueType [:db/ident]}] ident) [:db/valueType :db/ident])
+                      func (get type-functions type)]
+                  [ident func])))
+         (into []))))
 
-(def header
-  [:ppd/transaction-unique-identifier
-   :ppd/price
-   :ppd/date-of-transfer
-   :address/postcode
-   :property-type/code
-   :age/code
-   :duration/code
-   :address/PAON
-   :address/SAON
-   :address/street
-   :address/locality
-   :address/town_or_city
-   :address/district
-   :address/county
-   :category-type/code
-   :record-status/code])
-
-
-(defn build-key-func-pairs [db header type-functions]
-  (->> header
-       (map (fn [ident]
-              (let [type (get-in (d/pull db [{:db/valueType [:db/ident]}] ident) [:db/valueType :db/ident])
-                    func (get type-functions type)]
-                [ident func])))
-       (into [])))
-
-
+(defn nil?-or-empty? [v]
+  (or (nil? v) (empty? v)))
 
 (defn transform-csv-row [key-function-pairs row]
   (->> (map vector key-function-pairs row)
        (map (fn [[[k f] v]]
-              [k (f v)]))
+              [k (if (nil?-or-empty? v) nil (f v))]))
        (into {})))
 
 (defn read-csv-into-vector [path]
@@ -692,11 +670,7 @@
     (->> (csv/read-csv in-file)
          (into []))))
 
-(defn build-flat-data [db header grid-data]
-  (let [pairs (build-key-func-pairs db header type-functions)]
-    (->> grid-data
-         (map (partial transform-csv-row pairs))
-         (into []))))
+
 
 (declare structure-row)
 
@@ -714,53 +688,75 @@
        (filter (comp not nil? second))
        (into {})))
 
-(defn process-csv [db flat-data schema]
-  (->> flat-data
-       (take 4000)
-       (map (partial structure-row db schema))
-       (into [])
-       (p/process-all-entities (d/db conn)
-                               schema
-                               {:command-map     {:entity.schema/ppd     :command/insert
-                                                  :entity.schema/address :command/insert}
-                                :default-command :command/look-up})))
+
 
 ;
 ; 128 -> 184
 ; 200 - 1839.396
 ;
 
-(def csv-data (read-csv-into-vector path))
 
 
-(defn red [db grid-data]
-  (let [schema-id :entity.schema/ppd
-        pairs (build-key-func-pairs db header type-functions)
+(defn validate-schema [schema]
+  ;;check that the schema is valid do this once.
+  ;;(assert (dh/all-indexed? db natural-key) (str "All natural key attributes should be indexed " natural-key))
+  true)
+
+(defn process-grid-data [db schema-id command-data
+                         header grid-data]
+  (let [pairs (build-key-func-pairs db header)
         schema (u/recursively-pull-schema (d/db conn) schema-id {})]
-    (->> grid-data
-         (r/map (partial transform-csv-row pairs))
-         (r/map (partial structure-row db schema)))))
+    (validate-schema schema)
+    (p/process-all-entities db schema command-data
+                            (->> grid-data
+                                 (r/map (partial transform-csv-row pairs))
+                                 (r/map (partial structure-row db schema))
+                                 ;(r/map (fn [e]
+                                 ;         (= "LIVERPOOL" (get-in e [:ppd/address :address/locality]))))
+                                 ;
+                                 ))))
 
-(def bob (time (r/foldcat (red (d/db conn) csv-data))))
+(def process-result (process-grid-data (d/db conn)
+
+                                       :entity.schema/ppd
+
+                                       {:command-map     {:entity.schema/ppd     :command/insert
+                                                          :entity.schema/address :command/insert}
+                                        :default-command :command/look-up}
+
+                                       [:ppd/transaction-unique-identifier
+                                        :ppd/price
+                                        :ppd/date-of-transfer
+                                        :address/postcode
+                                        :property-type/code
+                                        :age/code
+                                        :duration/code
+                                        :address/PAON
+                                        :address/SAON
+                                        :address/street
+                                        :address/locality
+                                        :address/town_or_city
+                                        :address/district
+                                        :address/county
+                                        :category-type/code
+                                        :record-status/code] (read-csv-into-vector path)))
+
+(first (p/get-errors-from-process-result process-result))
 
 
-;
-;(def structured-data (r/foldcat (xf (d/db conn) :entity.schema/ppd csv-data)))
-;
-;(def flat-data (build-flat-data (d/db conn) header csv-data))
-;
-;(def schema (u/recursively-pull-schema (d/db conn) :entity.schema/ppd {}))
-;
-;(clojure.pprint/pprint "Go go go")
-;(def process-result (time (process-csv (d/db conn) flat-data schema)))
-;
-;(first (p/get-entities-from-process-result process-result))
-;
-
-;(def txs (p/get-entities-from-process-result process-result))
 
 
-;@(d/transact conn txs)
+(def txs (p/get-entities-from-process-result process-result))
+
+(def ents (p/get-entities-from-process-result process-result))
+
+(filter (fn [e] (= #db/id[:db.part/user -2450221] (get-in e [:ppd/address :db/id])))
+        ents)
+
+
+
+
+@(d/transact conn txs)
 ;
 ;
 ;(def txs-8000 (time (process-csv (d/db conn) header path)))
