@@ -97,3 +97,58 @@
 (def all-fields
   (->> (concat linked-list-fields entity-schema-fields)
        (into [])))
+
+
+
+(def enum-schema
+  {:db/id                     (d/tempid :db.part/entity-schema)
+   :db/ident                  :entity.schema/enum
+   :entity.schema/part        :db.part/entity-schema
+   :entity.schema/fields      #{{:field/schema    :db/ident
+                                 :field/nullable? false}}
+   :entity.schema/natural-key [:db/ident]})
+
+(def datomic-field-schema
+  {:db/id                (d/tempid :db.part/entity-schema)
+   :db/ident             :entity.schema/datomic-field
+   :entity.schema/part   :db.part/entity-schema
+   :entity.schema/fields #{
+                           {:db/id           (d/tempid :db.part/entity-schema)
+                            :field/schema    :db/ident
+                            :field/nullable? false}
+
+                           {:db/id               (d/tempid :db.part/entity-schema)
+                            :field/schema        :db/valueType
+                            :field/entity-schema enum-schema
+                            :field/nullable?     false}
+
+                           {:db/id               (d/tempid :db.part/entity-schema)
+                            :field/schema        :db/cardinality
+                            :field/entity-schema enum-schema
+                            :field/nullable?     false}
+
+                           {:db/id           (d/tempid :db.part/entity-schema)
+                            :field/schema    :db/index
+                            :field/nullable? true}
+
+                           {:db/id               (d/tempid :db.part/entity-schema)
+                            :field/schema        :db/unique
+                            :field/entity-schema enum-schema
+                            :field/nullable?     true}
+                           }
+   })
+
+
+
+(def field-schema
+  {:db/ident                  :entity.schema/field
+   :entity.schema/fields      #{{:field/schema        :field/schema
+                                 :field/entity-schema {}
+                                 :field/nullable?     false}
+                                {:field/schema    :field/nullable?
+                                 :field/nullable? false}}
+   :entity.schema/natural-key []})
+
+
+(def entity-schema-schema
+  )

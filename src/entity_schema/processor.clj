@@ -2,8 +2,7 @@
   (:require [clojure.core.reducers :as r]
             [entity-schema.datomic.entity-schema :as es]
             [entity-schema.validation :as v]
-            [entity-schema.util :as u])
-  (:import (java.util LinkedHashMap)))
+            [entity-schema.util :as u]))
 
 (defn assoc-if-not-nil [map key value]
   (if (nil? value) map (assoc map key value)))
@@ -43,8 +42,6 @@
             upd-id-cache (update-id-cache id-cache ident natural-key-value-set new-id)]
         [new-id upd-id-cache]))))
 
-
-
 (defn get-id
   "return [entity-in-db? db-id id-cache errored?]"
   ([db schema command-data entity id-cache]
@@ -58,8 +55,6 @@
          [entity-in-db? validated-db-id id-cache db-id-errored?]
          (let [[new-id upd-id-cache] (get-new-id id-cache entity schema)]
            [entity-in-db? new-id upd-id-cache db-id-errored?]))))))
-
-
 
 (declare process-entity)
 
@@ -124,10 +119,6 @@
           [{} id-cache false]
           fields))
 
-
-
-
-
 (defn process-entity
   "When processing the entity the following is returned
   [entity id-cache errored?]"
@@ -150,21 +141,6 @@
                  (process-fields db entity-in-db? command-data entity upd-key-field-id-cache non-key-fields)
                  merged-entity (merge upd-key-field-entity non-key-field-entity)]
              [merged-entity non-key-id-cache non-key-fields-errored?])))))))
-
-
-;;How do I want this to work.
-
-
-
-
-; entity -> entity.schema
-; (entity, schema) -> s
-
-; So what when we have a supertype and a sub type - Do we every need to derive?
-
-; should
-
-
 
 
 
