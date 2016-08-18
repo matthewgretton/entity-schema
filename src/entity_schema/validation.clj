@@ -13,10 +13,14 @@
 (defn error? [v]
   (and (map? v) (contains? v :error/type)))
 
-(defn error [type msg data]
+(defn error
+  ([type msg data]
   {:error/type    type
    :error/message msg
    :error/data    data})
+  ([type msg]
+   {:error/type    type
+    :error/message msg}))
 
 (defn thread-validation-functions [field value validation-functions]
   "Thread value through validation functions. Short circuits if value is errored or nil"
@@ -72,8 +76,7 @@
 (defn validate-nullibility [entity-in-db? {nullable? :field/nullable?} value]
   (letfn [(not-nullable-error []
             (error :error.type/required-field
-                   "Required Field"
-                   {}))]
+                   "Required Field"))]
     (if (not (nil? value))
       [value false]
       (if (not (or entity-in-db? nullable?))

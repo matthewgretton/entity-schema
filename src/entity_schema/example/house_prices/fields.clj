@@ -4,13 +4,13 @@
             [entity-schema.datomic.entity-schema-data :as esd]
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
-            [entity-schema.datomic.entity-schema :as es]
             [entity-schema.processor :as p]
             [entity-schema.util :as u]
             [io.rkn.conformity :as c]
     ; [clojure.core.async :as a :refer (>!! <! >! go-loop)]
             [datomic.api :as d]
-            [clojure.core.reducers :as r])
+            [clojure.core.reducers :as r]
+            [entity-schema.validation :as v])
   (:import (java.util UUID Date)
            (java.net URI)
            (java.time.format DateTimeFormatter)
@@ -454,7 +454,7 @@
                                  :field/nullable? false}
 
                                 {:field/schema    :address/SAON
-                                 :field/nullable? false}
+                                 :field/nullable? true}
 
                                 {:field/schema    :address/street
                                  :field/nullable? true}
@@ -627,7 +627,7 @@
 
 
 
-(def path "/Users/mgretton/Code/entity-schema/src/entity_schema/example/house_prices/pp-2016.csv")
+(def path "/Users/matthewgretton/Documents/Projects/entity-schema/src/entity_schema/example/house_prices/pp-2016.csv")
 
 (defn toDate [ldt]
   (Date/from (.toInstant (.atZone ldt (ZoneOffset/UTC)))))
@@ -715,8 +715,11 @@
                                  ;         (= "LIVERPOOL" (get-in e [:ppd/address :address/locality]))))
                                  ;
                                  ))))
+(def grid-data (time (into []  (take 5000 (read-csv-into-vector path)))))
 
-(def process-result (process-grid-data (d/db conn)
+
+
+(def process-result (time (process-grid-data (d/db conn)
 
                                        :entity.schema/ppd
 
@@ -739,24 +742,49 @@
                                         :address/district
                                         :address/county
                                         :category-type/code
-                                        :record-status/code] (read-csv-into-vector path)))
+                                        :record-status/code] grid-data)))
 
-(first (p/get-errors-from-process-result process-result))
+(count (p/get-errors-from-process-result process-result))
+
+(defn get-vals [m ks]
+  (->> ks
+       (map #(get m %))
+       (filter (comp not nil?))
+       (filter (comp not v/error?))
+       (into [])))
+
+(defn construct-str-address [address-entity]
+  (let [keys [:address/PAON :address/SAON :address/street :address/postcode]]
+    (clojure.string/join ", " (get-vals address-entity keys))))
 
 
+(construct-str-address {:address/street "WOLLASTON WAY",
+                        :address/SAON "UNIT 1",
+                        :address/postcode {:error/type :error.type/required-field, :error/message "Required Field"},
+                        :address/PAON "ACADEMY HOUSE"})
 
 
-(def txs (p/get-entities-from-process-result process-result))
+(->> (p/get-errors-from-process-result process-result)
+     (map #(construct-str-address (:ppd/address %)))
+     (into []))
 
-(def ents (p/get-entities-from-process-result process-result))
-
-(filter (fn [e] (= #db/id[:db.part/user -2450221] (get-in e [:ppd/address :db/id])))
-        ents)
-
-
-
-
-@(d/transact conn txs)
+;;TODO it would be nice if we could identify what line of the input the errors occor, and also what the type of
+;;TODO error is
+;
+;
+;
+;
+;(def txs (p/get-entities-from-process-result process-result))
+;
+;(def ents (p/get-entities-from-process-result process-result))
+;
+;(filter (fn [e] (= #db/id[:db.part/user -2450221] (get-in e [:ppd/address :db/id])))
+;        ents)
+;
+;
+;
+;
+;@(d/transact conn txs)
 ;
 ;
 ;(def txs-8000 (time (process-csv (d/db conn) header path)))

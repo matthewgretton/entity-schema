@@ -2,7 +2,8 @@
   (:require [clojure.core.reducers :as r]
             [entity-schema.datomic.entity-schema :as es]
             [entity-schema.validation :as v]
-            [entity-schema.util :as u]))
+            [entity-schema.util :as u])
+  (:import (java.util LinkedHashMap)))
 
 (defn assoc-if-not-nil [map key value]
   (if (nil? value) map (assoc map key value)))
@@ -123,6 +124,10 @@
           [{} id-cache false]
           fields))
 
+
+
+
+
 (defn process-entity
   "When processing the entity the following is returned
   [entity id-cache errored?]"
@@ -215,7 +220,7 @@
                                                                 (into [] es)
                                                                 es)
                                                               (replace-id map)))))]
-     [(r/cat transformed-l-es transformed-r-es) merged (or l-errored? r-errored?)])))
+     [(into []  (concat transformed-l-es transformed-r-es)) merged (or l-errored? r-errored?)])))
 
 ;;TODO also need a way of just using the entity id
 (defn process-all-entities-from-type
@@ -252,7 +257,8 @@
 (defn get-errors-from-process-result [[list errored?]]
   (if errored?
     (->> (into [] list)
-         (filter (comp second)))
+         (filter (comp second))
+         (map first))
     []))
 
 
