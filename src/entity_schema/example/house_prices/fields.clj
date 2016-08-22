@@ -147,7 +147,7 @@
                                  (r/map (partial transform-csv-row pairs))
                                  (r/map (partial structure-row db schema))))))
 
-(def grid-data (time (into []  (take 5000 (read-csv-into-vector path)))))
+(def grid-data (time (into []  (take 10 (read-csv-into-vector path)))))
 
 
 
@@ -178,6 +178,8 @@
 
 (count (p/get-errors-from-process-result process-result))
 
+(p/get-entities-from-process-result process-result)
+
 (defn get-vals [m ks]
   (->> ks
        (map #(get m %))
@@ -190,10 +192,6 @@
     (clojure.string/join ", " (get-vals address-entity keys))))
 
 
-(construct-str-address {:address/street "WOLLASTON WAY",
-                        :address/SAON "UNIT 1",
-                        :address/postcode {:error/type :error.type/required-field, :error/message "Required Field"},
-                        :address/PAON "ACADEMY HOUSE"})
 
 
 (->> (p/get-errors-from-process-result process-result)
@@ -206,20 +204,14 @@
 ;
 ;
 ;
-;(def txs (p/get-entities-from-process-result process-result))
-;
-;(def ents (p/get-entities-from-process-result process-result))
-;
-;(filter (fn [e] (= #db/id[:db.part/user -2450221] (get-in e [:ppd/address :db/id])))
-;        ents)
+(def txs (p/get-entities-from-process-result process-result))
 ;
 ;
 ;
 ;
-;@(d/transact conn txs)
 ;
+@(d/transact conn txs)
 ;
-;(def txs-8000 (time (process-csv (d/db conn) header path)))
 ;
 ;
 

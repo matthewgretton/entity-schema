@@ -58,18 +58,18 @@
 
 (declare process-entity)
 
-(defn process-ref-entity [db command-data field value id-cache]
+(defn process-ref-entity [db command-data field value id-cache entity-cache]
   (let [[expanded-value expand-errored?] (if (ref-identifier-type? value)
                                            (->> (expand-ref db value) (v/validate-expanded-ref field value))
                                            [value false])]
     (if expand-errored?
-      [value id-cache false]
-      (process-entity db (:field/entity-schema field) command-data expanded-value id-cache))))
+      [value id-cache entity-cache false]
+      (process-entity db (:field/entity-schema field) command-data expanded-value id-cache entity-cache))))
 
-(defn process-valid-value [db command-data field value id-cache]
+(defn process-valid-value [db command-data field value id-cache entity-cache]
   (if (u/ref-field? field)
-    (process-ref-entity db command-data field value id-cache)
-    [value id-cache false]))
+    (process-ref-entity db command-data field value id-cache entity-cache)
+    [value id-cache entity-cache false]))
 
 (defn validate-single-value [entity-in-db? field value]
   (v/thread-validation-functions field value [
@@ -78,29 +78,29 @@
                                               (partial v/validate-function)
                                               ]))
 
-(defn process-one-value [db entity-in-db? command-data field value id-cache]
+(defn process-one-value [db entity-in-db? command-data field value id-cache entity-cache]
   (let [[validated-value errored?] (validate-single-value entity-in-db? field value)]
     (if errored?
-      [validated-value id-cache errored?]
-      (process-valid-value db command-data field validated-value id-cache))))
+      [validated-value id-cache entity-cache errored?]
+      (process-valid-value db command-data field validated-value id-cache entity-cache))))
 
-(defn process-many-values [db entity-in-db? command-data field many-values id-cache]
+(defn process-many-values [db entity-in-db? command-data field many-values id-cache entity-cache]
   (reduce
-    (fn [[vs current-id-cache current-errored?] v]
-      (let [[new-v upd-id-cache errored?] (process-one-value db entity-in-db? command-data field v current-id-cache)]
-        [(conj vs new-v) upd-id-cache (or current-errored? errored?)]))
-    [#{} id-cache false]
+    (fn [[vs current-id-cache current-entity-cache current-errored?] v]
+      (let [[new-v upd-id-cache upd-entity-cache errored?] (process-one-value db entity-in-db? command-data field v current-id-cache current-entity-cache)]
+        [(conj vs new-v) upd-id-cache upd-entity-cache (or current-errored? errored?)]))
+    [#{} id-cache entity-cache false]
     many-values))
 
-(defn process-value [db entity-in-db? command-data field value id-cache]
+(defn process-value [db entity-in-db? command-data field value id-cache entity-cache]
   "Get id and value for the field from the entity
   returns [id value id-cache errored?]"
   (let [[cardinality-validated-value cardinality-errored?] (v/validate-cardinality field value)]
     (if cardinality-errored?
-      [cardinality-validated-value id-cache cardinality-errored?]
+      [cardinality-validated-value id-cache entity-cache cardinality-errored?]
       (if (u/cardinality-many? field)
-        (process-many-values db entity-in-db? command-data field cardinality-validated-value id-cache)
-        (process-one-value db entity-in-db? command-data field cardinality-validated-value id-cache)))))
+        (process-many-values db entity-in-db? command-data field cardinality-validated-value id-cache entity-cache)
+        (process-one-value db entity-in-db? command-data field cardinality-validated-value id-cache entity-cache)))))
 
 (defn split-fields-by-natural-key [fields natural-key-set]
   (let [grouped-fields (->> fields
@@ -110,37 +110,36 @@
         non-key-fields (get grouped-fields false [])]
     [key-fields non-key-fields]))
 
-(defn process-fields [db entity-in-db? command-data entity id-cache fields]
-  (reduce (fn [[current-entity current-id-cache current-errored?] field]
+(defn process-fields [db entity-in-db? command-data entity id-cache entity-cache fields]
+  (reduce (fn [[current-entity current-id-cache current-entity-cache current-errored?] field]
             (let [value (u/get-value entity field)
-                  [proccessed-value updated-id-cache errored?] (process-value db entity-in-db? command-data field value current-id-cache)
+                  [proccessed-value updated-id-cache updated-entity-cache errored?] (process-value db entity-in-db? command-data field value current-id-cache current-entity-cache)
                   updated-entity (assoc-if-not-nil current-entity (get-in field [:field/schema :db/ident]) proccessed-value)]
-              [updated-entity updated-id-cache (or errored? current-errored?)]))
-          [{} id-cache false]
+              [updated-entity updated-id-cache updated-entity-cache (or errored? current-errored?)]))
+          [{} id-cache entity-cache false]
           fields))
 
 (defn process-entity
   "When processing the entity the following is returned
   [entity id-cache errored?]"
-  ([db {:keys [:entity.schema/fields] :as schema} command-data entity id-cache]
+  ([db {:keys [:entity.schema/fields] :as schema} command-data entity id-cache entity-cache]
    (assert (not (nil? fields)))
    (let [natural-key-set (u/natural-key-coll schema #{})
          [key-fields non-key-fields] (split-fields-by-natural-key fields natural-key-set)
-         [key-field-entity key-field-id-cache key-fields-errored?]
-         (process-fields db false command-data entity id-cache key-fields)]
-
+         [key-field-entity key-field-id-cache key-field-entity-cache key-fields-errored?]
+         (process-fields db false command-data entity id-cache entity-cache key-fields)]
      (if key-fields-errored?
-       [key-field-entity key-field-id-cache key-fields-errored?]
-       (let [[entity-in-db? db-id upd-key-field-id-cache db-id-error?] (get-id db schema command-data key-field-entity key-field-id-cache)
-             upd-key-field-entity (assoc key-field-entity :db/id db-id)]
-
+       [key-field-entity key-field-id-cache key-field-entity-cache key-fields-errored?]
+       (let [[entity-in-db? db-id upd-key-field-id-cache db-id-error?]
+             (get-id db schema command-data key-field-entity key-field-id-cache)
+             db-upd-key-field-entity (assoc key-field-entity :db/id db-id)]
          (if db-id-error?
-           [upd-key-field-entity upd-key-field-id-cache db-id-error?]
+           [db-upd-key-field-entity upd-key-field-id-cache key-field-entity-cache db-id-error?]
 
-           (let [[non-key-field-entity non-key-id-cache non-key-fields-errored?]
-                 (process-fields db entity-in-db? command-data entity upd-key-field-id-cache non-key-fields)
-                 merged-entity (merge upd-key-field-entity non-key-field-entity)]
-             [merged-entity non-key-id-cache non-key-fields-errored?])))))))
+           (let [[non-key-field-entity non-key-id-cache non-key-entity-cache non-key-fields-errored?]
+                 (process-fields db entity-in-db? command-data entity upd-key-field-id-cache key-field-entity-cache non-key-fields )
+                 merged-entity (merge db-upd-key-field-entity non-key-field-entity)]
+             [merged-entity non-key-id-cache non-key-entity-cache non-key-fields-errored?])))))))
 
 
 
@@ -171,10 +170,12 @@
        (filter (comp not empty? second))
        (into {})))
 
+
+;;TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 (defn combine-result
   "Combine the results from two parrallel runs"
-  ([] [[] {} false])
-  ([[l-es l-id-cache l-errored?] [r-es r-id-cache r-errored?]]
+  ([] [[] {} {} false])
+  ([[l-es l-id-cache l-entity-cache l-errored?] [r-es r-id-cache r-entity-cache r-errored?]]
    (let [cache-intersect (intersect-id-cache l-id-cache r-id-cache)
          merged (merge-id-caches l-id-cache r-id-cache cache-intersect)
          [l-id-map r-id-map] (->> cache-intersect
@@ -196,18 +197,18 @@
                                                                 (into [] es)
                                                                 es)
                                                               (replace-id map)))))]
-     [(into []  (concat transformed-l-es transformed-r-es)) merged (or l-errored? r-errored?)])))
+     [(into []  (concat transformed-l-es transformed-r-es)) merged nil (or l-errored? r-errored?)])))
 
 ;;TODO also need a way of just using the entity id
 (defn process-all-entities-from-type
   "Returns [[entity errored?]... any-errored?] "
   ([db schema-type command-data entities]
-   (let [[es _ errored?]
-         (r/fold combine-result
-                 (fn [[es id-cache current-errored?] entity]
+   (let [[es _ _ errored?]
+         (r/fold 1 combine-result
+                 (fn [[es id-cache entity-cache current-errored?] entity]
                    (let [schema (u/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
-                         [processed-entity updated-id-cache errored?] (process-entity db schema command-data entity id-cache)]
-                     [(conj es [processed-entity errored?]) updated-id-cache (or current-errored? errored?)]))
+                         [processed-entity updated-id-cache updated-entity-cache errored?] (process-entity db schema command-data entity id-cache entity-cache)]
+                     [(conj es [processed-entity errored?]) updated-id-cache updated-entity-cache (or current-errored? errored?)]))
                  entities)]
      [es errored?])))
 
@@ -218,11 +219,11 @@
 
   Note that entities must be reduceable to take advantage of multiple cores so a lazy seq will not take advantage"
   ([db schema command-data entities]
-   (let [[es _ errored?]
+   (let [[es _ _ errored?]
          (r/fold combine-result
-                 (fn [[es id-cache current-errored?] entity]
-                   (let [[processed-entity updated-id-cache errored?] (process-entity db schema command-data entity id-cache)]
-                     [(conj es [processed-entity errored?]) updated-id-cache (or current-errored? errored?)]))
+                 (fn [[es id-cache entity-cache current-errored?] entity]
+                   (let [[processed-entity updated-id-cache updated-entity-cache errored?] (process-entity db schema command-data entity id-cache entity-cache)]
+                     [(conj es [processed-entity errored?]) updated-id-cache updated-entity-cache (or current-errored? errored?)]))
                  entities)]
      [es errored?])))
 
