@@ -5,7 +5,7 @@
                                    :creds :gpg}}
 
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [com.datomic/datomic-pro "0.9.5359"]
+                 [com.datomic/datomic-pro "0.9.5394"]
                  [cursive/datomic-stubs "0.9.5153" :scope "provided"]
                  [clj-yaml "0.4.0"]
                  [org.clojure/data.csv "0.1.3"]
