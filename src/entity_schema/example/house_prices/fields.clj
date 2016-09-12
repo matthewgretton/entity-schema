@@ -218,3 +218,64 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+;;Test stuff that we should really put in a test on there own.
+
+ (assert (= [[{:field/schema {:db/ident :ppd/transaction-unique-identifier,
+                              :db/cardinality {:db/ident :db.cardinality/one},
+                              :db/valueType {:db/ident :db.type/string}},
+               :field/nullable? false}]
+             [{:field/schema {:db/ident :ppd/date-of-transfer,
+                              :db/cardinality {:db/ident :db.cardinality/one},
+                              :db/valueType {:db/ident :db.type/instant}},
+               :field/nullable? false}
+              {:field/schema {:db/ident :ppd/price,
+                              :db/cardinality {:db/ident :db.cardinality/one},
+                              :db/valueType {:db/ident :db.type/long}},
+               :field/nullable? false}]]
+            (p/split-fields-by-natural-key #{
+
+                                 {:field/schema
+                                                   {:db/ident :ppd/date-of-transfer,
+                                                    :db/cardinality {:db/ident :db.cardinality/one},
+                                                    :db/valueType {:db/ident :db.type/instant}},
+                                  :field/nullable? false}
+                                 {:field/schema
+                                                   {:db/ident :ppd/transaction-unique-identifier,
+                                                    :db/cardinality {:db/ident :db.cardinality/one},
+                                                    :db/valueType {:db/ident :db.type/string}},
+                                  :field/nullable? false}
+
+
+                                 {:field/schema
+                                                   {:db/ident :ppd/price,
+                                                    :db/cardinality {:db/ident :db.cardinality/one},
+                                                    :db/valueType {:db/ident :db.type/long}},
+                                  :field/nullable? false}
+                                 }
+                               #{:ppd/transaction-unique-identifier})))
+
+
+
+

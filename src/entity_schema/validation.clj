@@ -74,14 +74,11 @@
       [(unrecognised-type-error value-type valid-types) false])))
 
 (defn validate-nullibility [entity-in-db? {nullable? :field/nullable?} value]
-  (letfn [(not-nullable-error []
-            (error :error.type/required-field
-                   "Required Field"))]
-    (if (not (nil? value))
-      [value false]
-      (if (not (or entity-in-db? nullable?))
-        [(not-nullable-error) true]
-        [nil false]))))
+  (if (not (nil? value))
+    [value false]
+    (if (not (or entity-in-db? nullable?))
+      [(error :error.type/required-field "Required Field") true]
+      [nil false])))
 
 (defn validate-cardinality [field value]
   (letfn [(incompatible-cardinality-error [value]
@@ -141,6 +138,19 @@
         [(entity-not-expected-to-exist-error (u/natural-key-coll schema [])) true]
         (contains? #{:command/look-up :command/update :command/upsert} command)
         [db-id false]))))
+
+
+
+(defn validate-run-existence [id entity-cache command]
+  (if (contains? entity-cache id)
+    (cond (= command :insert) [(error :error.type/entity-not-expected-to-exist "Entity not expected to exist" id) true]
+          (= command :upsert) [(error :error.type/entity-not-expected-to-exist "Entity not expected to exist" id) true]
+          (= command :update) [id false]
+          (= command :look-up) [id false])
+    (cond (= command :insert)
+          (= command :upsert)
+          (= command :update)
+          (= command :look-up))))
 
 
 
