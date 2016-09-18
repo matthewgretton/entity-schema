@@ -147,135 +147,205 @@
                                  (r/map (partial transform-csv-row pairs))
                                  (r/map (partial structure-row db schema))))))
 
-(def grid-data (time (into []  (take 10 (read-csv-into-vector path)))))
+(def grid-data (time (into [] (take 10 (read-csv-into-vector path)))))
 
-
-
+;
+;
 (def process-result (time (process-grid-data (d/db conn)
 
-                                       :entity.schema/ppd
+                                             :entity.schema/ppd
 
-                                       {:command-map     {:entity.schema/ppd     :command/insert
-                                                          :entity.schema/address :command/insert}
-                                        :default-command :command/look-up}
+                                             {:command-map     {:entity.schema/ppd     :command/insert
+                                                                :entity.schema/address :command/insert}
+                                              :default-command :command/look-up}
 
-                                       [:ppd/transaction-unique-identifier
-                                        :ppd/price
-                                        :ppd/date-of-transfer
-                                        :address/postcode
-                                        :property-type/code
-                                        :age/code
-                                        :duration/code
-                                        :address/PAON
-                                        :address/SAON
-                                        :address/street
-                                        :address/locality
-                                        :address/town_or_city
-                                        :address/district
-                                        :address/county
-                                        :category-type/code
-                                        :record-status/code] grid-data)))
-
-(count (p/get-errors-from-process-result process-result))
-
-(p/get-entities-from-process-result process-result)
-
-(defn get-vals [m ks]
-  (->> ks
-       (map #(get m %))
-       (filter (comp not nil?))
-       (filter (comp not v/error?))
-       (into [])))
-
-(defn construct-str-address [address-entity]
-  (let [keys [:address/PAON :address/SAON :address/street :address/postcode]]
-    (clojure.string/join ", " (get-vals address-entity keys))))
+                                             [:ppd/transaction-unique-identifier
+                                              :ppd/price
+                                              :ppd/date-of-transfer
+                                              :address/postcode
+                                              :property-type/code
+                                              :age/code
+                                              :duration/code
+                                              :address/PAON
+                                              :address/SAON
+                                              :address/street
+                                              :address/locality
+                                              :address/town_or_city
+                                              :address/district
+                                              :address/county
+                                              :category-type/code
+                                              :record-status/code] grid-data)))
 
 
 
+(let [left-input
+      [[[{:db/id           (d/tempid :db.part/user -1)
+          :entity/code     {:db/id 123 :code/value "A"}
+          :entity/unq-key1 "Bob"
+          :entity/unq-key2 2} false]]
 
-(->> (p/get-errors-from-process-result process-result)
-     (map #(construct-str-address (:ppd/address %)))
-     (into []))
+       {:entity.schema/test1
+        {{:entity/unq-key1 "Bob"
+          :entity/unq-key2 2}
+         [false (d/tempid :db.part/user -1)],
+         }
+        :entity.schema/test2
+        {{:code/value "A"}
+         [true 123],
+         }}
+       nil
+       false
+       ]
+      ;;TODO add one in that comes from the db and then try also with ones that do/don't exist on the
+      ;;TODO right or left hand side.
+      right-input [[[{:db/id           (d/tempid :db.part/user -2)
+                      :entity/code     {:db/id 123 :code/value "A"}
+                      :entity/unq-key1 "Bob"
+                      :entity/unq-key2 2} false]
+                    ]
 
-;;TODO it would be nice if we could identify what line of the input the errors occor, and also what the type of
-;;TODO error is
+                   {:entity.schema/test1
+                    {{:entity/unq-key1 "Bob"
+                      :entity/unq-key2 2}
+                     [false (d/tempid :db.part/user -2)],
+                     }
+                    :entity.schema/test2
+                    {{:code/value "A"}
+                     [true 123],
+                     }}
+                   nil
+                   false
+                   ]
+
+      result (p/combine-result left-input right-input)
+      top-id (:db/id (first (first (first result))))
+      expected [[[{:db/id           top-id
+                   :entity/code     {:db/id 123, :code/value "A"},
+                   :entity/unq-key1 "Bob",
+                   :entity/unq-key2 2}
+                  false]
+                 [{:db/id           top-id
+                   :entity/code     {:db/id 123, :code/value "A"},
+                   :entity/unq-key1 "Bob",
+                   :entity/unq-key2 2}
+                  false]]
+                {:entity.schema/test1
+                 {{:entity/unq-key1 "Bob", :entity/unq-key2 2}
+                  [false top-id]},
+                 :entity.schema/test2
+                 {{:code/value "A"}
+                  [true 123]}}
+                nil
+                false]]
+  (clojure.data/diff expected result))
+
+
+
+;
+;(count (p/get-errors-from-process-result process-result))
+;
+;(p/get-entities-from-process-result process-result)
+;
+;(defn get-vals [m ks]
+;  (->> ks
+;       (map #(get m %))
+;       (filter (comp not nil?))
+;       (filter (comp not v/error?))
+;       (into [])))
+;
+;(defn construct-str-address [address-entity]
+;  (let [keys [:address/PAON :address/SAON :address/street :address/postcode]]
+;    (clojure.string/join ", " (get-vals address-entity keys))))
 ;
 ;
 ;
 ;
-(def txs (p/get-entities-from-process-result process-result))
+;(->> (p/get-errors-from-process-result process-result)
+;     (map #(construct-str-address (:ppd/address %)))
+;     (into []))
+;
+;;;TODO it would be nice if we could identify what line of the input the errors occor, and also what the type of
+;;;TODO error is
+;;
+;;
+;;
+;;
+;(def txs (p/get-entities-from-process-result process-result))
+;;
+;;
+;;
+;;
+;;
+;@(d/transact conn txs)
+;;
+;;
+;;
 ;
 ;
 ;
 ;
 ;
-@(d/transact conn txs)
 ;
 ;
 ;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-;;Test stuff that we should really put in a test on there own.
-
- (assert (= [[{:field/schema {:db/ident :ppd/transaction-unique-identifier,
-                              :db/cardinality {:db/ident :db.cardinality/one},
-                              :db/valueType {:db/ident :db.type/string}},
-               :field/nullable? false}]
-             [{:field/schema {:db/ident :ppd/date-of-transfer,
-                              :db/cardinality {:db/ident :db.cardinality/one},
-                              :db/valueType {:db/ident :db.type/instant}},
-               :field/nullable? false}
-              {:field/schema {:db/ident :ppd/price,
-                              :db/cardinality {:db/ident :db.cardinality/one},
-                              :db/valueType {:db/ident :db.type/long}},
-               :field/nullable? false}]]
-            (p/split-fields-by-natural-key #{
-
-                                 {:field/schema
-                                                   {:db/ident :ppd/date-of-transfer,
-                                                    :db/cardinality {:db/ident :db.cardinality/one},
-                                                    :db/valueType {:db/ident :db.type/instant}},
-                                  :field/nullable? false}
-                                 {:field/schema
-                                                   {:db/ident :ppd/transaction-unique-identifier,
-                                                    :db/cardinality {:db/ident :db.cardinality/one},
-                                                    :db/valueType {:db/ident :db.type/string}},
-                                  :field/nullable? false}
-
-
-                                 {:field/schema
-                                                   {:db/ident :ppd/price,
-                                                    :db/cardinality {:db/ident :db.cardinality/one},
-                                                    :db/valueType {:db/ident :db.type/long}},
-                                  :field/nullable? false}
-                                 }
-                               #{:ppd/transaction-unique-identifier})))
-
-
-
-
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;;;Test stuff that we should really put in a test on there own.
+;
+; (assert (= [[{:field/schema {:db/ident :ppd/transaction-unique-identifier,
+;                              :db/cardinality {:db/ident :db.cardinality/one},
+;                              :db/valueType {:db/ident :db.type/string}},
+;               :field/nullable? false}]
+;             [{:field/schema {:db/ident :ppd/date-of-transfer,
+;                              :db/cardinality {:db/ident :db.cardinality/one},
+;                              :db/valueType {:db/ident :db.type/instant}},
+;               :field/nullable? false}
+;              {:field/schema {:db/ident :ppd/price,
+;                              :db/cardinality {:db/ident :db.cardinality/one},
+;                              :db/valueType {:db/ident :db.type/long}},
+;               :field/nullable? false}]]
+;            (p/split-fields-by-natural-key #{
+;
+;                                 {:field/schema
+;                                                   {:db/ident :ppd/date-of-transfer,
+;                                                    :db/cardinality {:db/ident :db.cardinality/one},
+;                                                    :db/valueType {:db/ident :db.type/instant}},
+;                                  :field/nullable? false}
+;                                 {:field/schema
+;                                                   {:db/ident :ppd/transaction-unique-identifier,
+;                                                    :db/cardinality {:db/ident :db.cardinality/one},
+;                                                    :db/valueType {:db/ident :db.type/string}},
+;                                  :field/nullable? false}
+;
+;
+;                                 {:field/schema
+;                                                   {:db/ident :ppd/price,
+;                                                    :db/cardinality {:db/ident :db.cardinality/one},
+;                                                    :db/valueType {:db/ident :db.type/long}},
+;                                  :field/nullable? false}
+;                                 }
+;                               #{:ppd/transaction-unique-identifier})))
+;
+;
+;
+;

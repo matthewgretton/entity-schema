@@ -32,8 +32,8 @@
 (defn get-id [db {:keys [:db/ident :entity.schema/part] :as schema} command-data entity id-cache]
   "return [entity-in-db? db-id id-cache errored?]"
   (let [natural-key-list (u/natural-key-coll schema [])
-        natural-key-value-set (->> natural-key-list (map #(get entity %)) (into #{}))
-        [from-db? cached-id] (get-in id-cache [ident natural-key-value-set])]
+        natural-key-map (select-keys entity natural-key-list)
+        [from-db? cached-id] (get-in id-cache [ident natural-key-map])]
     (if cached-id
       [from-db? cached-id id-cache false]
       (let [db-id (es/look-up-entity-id db natural-key-list entity)
@@ -43,7 +43,7 @@
         (if db-id-errored?
           [entity-in-db? validated-db-id id-cache db-id-errored?]
           (let [id (if entity-in-db? validated-db-id (es/generate-db-id (:db/ident part)))
-                upd-id-cache (update-id-cache id-cache ident natural-key-value-set entity-in-db? id)]
+                upd-id-cache (update-id-cache id-cache ident natural-key-map entity-in-db? id)]
             [entity-in-db? id upd-id-cache db-id-errored?]))))))
 
 (declare process-entity)
@@ -153,11 +153,16 @@
 
 (defn intersect-id-cache [l-id-cache r-id-cache]
   (->> (intersect-with (fn [l-map r-map]
-                         (intersect-with (fn [l _] (es/generate-db-id (:part l))) l-map r-map)) l-id-cache r-id-cache)
+                         (intersect-with (fn [[l-from-db? l-id] [r-from-db? r-id]]
+                                           (assert (= l-from-db? r-from-db?))
+                                           [l-from-db? (if l-from-db?
+                                                         (do (assert (= l-id r-id)) l-id)
+                                                         (es/generate-db-id (:part l-id)))]) l-map r-map))
+                       l-id-cache r-id-cache)
        (filter (comp not empty? second))
        (into {})))
 
-;TODO check this works
+;TODO This will not work very nicely currently
 (defn combine-result
   "Combine the results from two parrallel runs"
   ([] [[] {} {} false])
@@ -167,9 +172,9 @@
          [l-id-map r-id-map] (->> cache-intersect
                                   (mapcat (fn [[e m]]
                                             (->> m
-                                                 (map (fn [[k new-id]]
+                                                 (map (fn [[k [_ new-id]]]
                                                         (let [[l-id r-id] (->> [l-id-cache r-id-cache]
-                                                                               (map #(get-in % [e k])))]
+                                                                               (map #(second (get-in % [e k]))))]
                                                           [l-id r-id new-id])))
                                                  (filter (fn [[a b _]]
                                                            (and (not (nil? a)) (not (nil? b))))))))
@@ -190,7 +195,7 @@
   "Returns [[entity errored?]... any-errored?] "
   ([db schema-type command-data entities]
    (let [[es _ _ errored?]
-         (r/fold 1 combine-result
+         (r/fold combine-result
                  (fn [[es id-cache entity-cache current-errored?] entity]
                    (let [schema (u/derive-schema db {:field/entity-schema-type {:db/ident schema-type}} entity)
                          [processed-entity updated-id-cache updated-entity-cache errored?] (process-entity db schema command-data entity id-cache entity-cache)]
@@ -205,8 +210,8 @@
 
   Note that entities must be reduceable to take advantage of multiple cores so a lazy seq will not take advantage"
   ([db schema command-data entities]
-   (let [[es _ _ errored?]
-         (r/fold combine-result
+   (let [[es id-cache _ errored?]
+         (r/fold 1 combine-result
                  (fn [[es id-cache entity-cache current-errored?] entity]
                    (let [[processed-entity updated-id-cache updated-entity-cache errored?] (process-entity db schema command-data entity id-cache entity-cache)]
                      [(conj es [processed-entity errored?]) updated-id-cache updated-entity-cache (or current-errored? errored?)]))
