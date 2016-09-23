@@ -166,7 +166,7 @@
 (defn combine-result
   "Combine the results from two parrallel runs"
   ([] [[] {} {} false])
-  ([[l-es l-id-cache l-entity-cache l-errored?] [r-es r-id-cache r-entity-cache r-errored?]]
+  ([[l-es l-id-cache l-entity-cache l-errored?]  [r-es r-id-cache r-entity-cache r-errored?]]
    (let [cache-intersect (intersect-id-cache l-id-cache r-id-cache)
          merged (merge-id-caches l-id-cache r-id-cache cache-intersect)
          [l-id-map r-id-map] (->> cache-intersect

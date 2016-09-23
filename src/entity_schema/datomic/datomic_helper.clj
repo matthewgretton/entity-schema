@@ -48,6 +48,12 @@
                               :imports  ~(:imports attr-map)
                               :code     '(do ~@body)}))))
 
+(defn create-field [field-map]
+  (merge field-map {:db/id                 (d/tempid :db.part/db)
+                    :db.install/_attribute :db.part/db}))
+
+
+
 
 
 

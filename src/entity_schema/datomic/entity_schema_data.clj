@@ -1,6 +1,9 @@
 (ns entity-schema.datomic.entity-schema-data
   (:require [datomic.api :as d]))
 
+
+
+
 (def linked-list-fields
   [{
     :db/id                 (d/tempid :db.part/db)
