@@ -1,5 +1,5 @@
 (ns entity-schema.validation
-  (:require [entity-schema.util :as u])
+  ;(:require [entity-schema.util :as u])
   (:import (java.util Map UUID Date)
            (java.net URI)
            (clojure.lang Keyword)))
@@ -70,8 +70,8 @@
                               (to-coll-not-map))]
       (if (some #(isa? (class value) %) valid-types)
         [value false]
-        [(incorrect-type-error value value-type valid-types) false])
-      [(unrecognised-type-error value-type valid-types) false])))
+        [(incorrect-type-error value value-type valid-types) true])
+      [(unrecognised-type-error value-type valid-types) true])))
 
 (defn validate-nullibility [entity-in-db? {nullable? :field/nullable?} value]
   (if (not (nil? value))
@@ -115,6 +115,10 @@
         [expanded-ref false]
         [(incorrect-ident-error unexpanded-ref) true]))))
 
+
+(defn natural-key-coll [{:keys [:entity.schema/natural-key] :as schema} coll]
+  (->> natural-key (map :db/ident) (into coll)))
+
 (defn validate-db-id [command schema db-id]
   (letfn [(entity-expected-to-exist-error [natural-key-list]
             (error :error.type/entity-expected-to-exist
@@ -131,11 +135,11 @@
         (contains? #{:command/insert :command/upsert} command)
         [db-id false]
         (contains? #{:command/look-up :command/update} command)
-        [(entity-expected-to-exist-error (u/natural-key-coll schema [])) true])
-      ;; id in db
+        [(entity-expected-to-exist-error (natural-key-coll schema [])) true])
+      ;; id in db 
       (cond
         (contains? #{:command/insert} command)
-        [(entity-not-expected-to-exist-error (u/natural-key-coll schema [])) true]
+        [(entity-not-expected-to-exist-error (natural-key-coll schema [])) true]
         (contains? #{:command/look-up :command/update :command/upsert} command)
         [db-id false]))))
 

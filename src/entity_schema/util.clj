@@ -84,6 +84,4 @@
     (get command-map ident default-command)))
 
 
-(defn natural-key-coll [{:keys [:entity.schema/natural-key] :as schema} coll]
-  (->> natural-key (map :db/ident) (into coll)))
 

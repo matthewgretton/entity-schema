@@ -5,9 +5,11 @@
             [entity-schema.datomic.datomic-helper :as dh]
             [entity-schema.processor :as p]
             [entity-schema.datomic.entity-schema :as es]
-            [entity-schema.datomic.entity-schema-data :as esd]))
+            [entity-schema.datomic.entity-schema-data :as esd]
+            [entity-schema.validation :as v]))
 
-(defn test-entity [fields schema command-data input expected-ouput]
+;;test method
+(defn test-single-entity [test-desc fields schema command-data input-entity expected-ouput]
   (let [uri (dh/create-in-mem-db-uri "entity-db")
         conn (do (d/create-database uri) (d/connect uri))]
     @(d/transact conn (->> fields (map #(dh/create-field %)) (into [])))
@@ -17,126 +19,82 @@
       @(d/transact conn esd/all-fields)
       @(d/transact conn [datomic-compat-schema])
       (let [pulled-schema (es/pull-entity-schema (d/db conn) (:db/ident datomic-compat-schema))
-            output (p/process-all-entities db pulled-schema command-data input)]
+            [pairs errored?] (p/process-all-entities db pulled-schema command-data [input-entity])
+            [result res-errored?] (first pairs)
+            id (:db/id result)
+            final-result (if (v/error? id) result (dissoc result :db/id))]
         (d/delete-database uri)
-        (is (= output expected-ouput))))))
+        (if (and (contains? result :db/id) (not (v/error? id)))
+          (is (= (:part id) (:entity.schema/part schema)) test-desc))
+        (is (= errored? res-errored?) test-desc)
+        (is (= expected-ouput final-result) test-desc)))))
 
-(deftest test-stuff
-  (testing
-    (test-entity [{:db/ident     :test-entity/string-field
-                   :db/valueType :db.type/string
-                   :db/cardinality :db.cardinality/one
-                   :db/unique :db.unique/identity}]
+(def string-field
+  {:db/ident       :test-entity/string-field
+   :db/valueType   :db.type/string
+   :db/cardinality :db.cardinality/one
+   :db/unique      :db.unique/identity})
 
-                 {:db/ident             :entity.schema/test
-                   :entity.schema/part :db.part/entity-schema
-                  :entity.schema/fields [{:field/nullable? false
-                                          :field/schema    :test-entity/string-field}]
-                  :entity.schema/natural-key [:test-entity/string-field]}
+(def simple-schema-required-field
+  {:db/ident                  :entity.schema/test
+   :entity.schema/part        :db.part/entity-schema
+   :entity.schema/fields      [{:field/nullable? false
+                                :field/schema    :test-entity/string-field}]
+   :entity.schema/natural-key [:test-entity/string-field]})
 
-                 {:command-map     {:entity.schema/test :command/insert}
-                  :default-command :command/look-up}
+(def simple-schema-optional-field
+  {:db/ident                  :entity.schema/test
+   :entity.schema/part        :db.part/entity-schema
+   :entity.schema/fields      [{:field/nullable? true
+                                :field/schema    :test-entity/string-field}]
+   :entity.schema/natural-key [:test-entity/string-field]})
 
-                 [{:test-entity/string-field 12}]
+(def insert-command-map
+  {:command-map     {:entity.schema/test :command/insert}
+   :default-command :command/look-up})
 
-                 nil
-                 )))
+(deftest single-entity-validation-test
+
+  (test-single-entity "Valid"
+                      [string-field] simple-schema-required-field insert-command-map
+                      {:test-entity/string-field "Bob12"}
+                      {:test-entity/string-field "Bob12"})
+
+  (test-single-entity "Incorrect field type"
+                      [string-field] simple-schema-required-field insert-command-map
+                      {:test-entity/string-field 12}
+                      {:test-entity/string-field {:error/data    {:datomic-type :db.type/string
+                                                                  :valid-types  #{java.lang.String}
+                                                                  :value        12
+                                                                  :value-type   java.lang.Long}
+                                                  :error/message "Incorrect Value Type"
+                                                  :error/type    :error.type/incorrect-type}})
+
+  (test-single-entity "Missing required field"
+                      [string-field] simple-schema-required-field insert-command-map
+                      {}
+                      {:test-entity/string-field {:error/message "Required Field"
+                                                  :error/type    :error.type/required-field}})
+
+  ;(test-single-entity "Function test"
+  ;                    [string-field] simple-schema-optional-field insert-command-map
+  ;                    {}
+  ;                    {:test-entity/string-field {:error/message "Required Field"
+  ;                                                :error/type    :error.type/required-field}})
+
+  ;; What do we need to happen here?
+  (test-single-entity "Missing (optional) natural key"
+                      [string-field] simple-schema-optional-field insert-command-map
+                      {}
+                      {:db/id {:error/message "Missing natural key"
+                               :error/type    :error.type/missing-natrual-key
+                               :error/data    {:error/entity      {}
+                                               :error/natural-key [:test-entity/string-field]}}}))
 
 
 
-;
-;
-;(deftest get-val-test
-;  (testing "Test missing when required field"
-;    (is (= [:test-entity/string-field
-;            {:error/data    {:field :test-entity/string-field
-;                             :type  :entity.schema.type/test-type}
-;             :error/message "Required Field"
-;             :error/type    :error.type/required-field}]
-;
-;           (v/validate-field nil
-;                             {:entity.schema/type {:db/ident
-;                                                   :entity.schema.type/test-type}}
-;
-;                             {:field/schema    {:db/ident     :test-entity/string-field
-;                                                :db/valueType {:db/ident :db.type/string}}
-;                              :field/nullable? false}
-;
-;                             {:test-entity/double-field "bob"}))))
-;
-;  (testing "Test missing when not required field"
-;    (is (= [:test-entity/string-field nil]
-;
-;           (v/validate-field nil
-;                             {:entity.schema/type {:db/ident :entity.schema.type/test-type}}
-;
-;                             {:field/schema    {:db/ident     :test-entity/string-field
-;                                                :db/valueType {:db/ident :db.type/string}}
-;                              :field/nullable? true}
-;
-;                             {:test-entity/double-field "bob"}))))
-;
-;  (testing "Test valid field validation"
-;    (is (= [:test-entity/double-field 1.0]
-;
-;           (v/validate-field nil
-;                             {:entity.schema/type {:db/ident :entity.schema.type/test-type}}
-;
-;                             {:field/schema    {:db/ident     :test-entity/double-field
-;
-;                                                :db/valueType {:db/ident :db.type/double}}
-;                              :field/nullable? false}
-;
-;                             {:test-entity/double-field 1.0}))))
-;
-;
-;  (testing "Test wrong type validation"
-;    (is (= [:test-entity/double-field
-;            {:error/data    {:datomic-type :db.type/double
-;                             :value-type   java.lang.String
-;                             :valid-types  #{java.lang.Double}
-;                             :value        "bob"}
-;             :error/message "Incorrect Value Type"
-;             :error/type    :error.type/incorrect-type}]
-;
-;           (v/validate-field nil
-;                             {:entity.schema/type {:db/ident :entity.schema.type/test-type}}
-;
-;                             {:field/schema    {:db/ident     :test-entity/double-field
-;                                                :db/valueType {:db/ident :db.type/double}}
-;                              :field/nullable? false}
-;
-;                             {:test-entity/double-field "bob"}))))
-;
-;
-;
-;
-;  (testing "Test getting a ref field"
-;    (is (= [:test-entity/ref-field {:a 1}]
-;
-;           (with-redefs-fn {#'v/validate-entity
-;                            (fn [db entity schema]
-;                              (assert (= db "db"))
-;                              (assert (= entity {:a 1}))
-;                              (assert (= schema {:b 1}))
-;                              entity)
-;                            #'es/derive-schema
-;                            (fn [db field entity]
-;                              (assert (not (nil? db)))
-;                              (assert (get-in field [:field/entity-schema-type :db/ident]))
-;                              (assert (get entity :a))
-;                              {:b 1})}
-;
-;             #(v/validate-field "db"
-;                                {:entity.schema/type {:db/ident :entity.schema.type/test-type}}
-;
-;                                {:field/schema             {:db/ident     :test-entity/ref-field
-;                                                            :db/valueType {:db/ident :db.type/ref}}
-;                                 :field/entity-schema-type {:db/ident :some-schema} ;;fake entity-schema
-;                                 :field/nullable?          false}
-;
-;                                {:test-entity/double-field "bob"
-;                                 :test-entity/ref-field    {:a 1}}))))))
+
+
 ;
 ;
 ;

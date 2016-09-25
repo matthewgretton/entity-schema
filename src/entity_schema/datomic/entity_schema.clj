@@ -1,6 +1,7 @@
 (ns entity-schema.datomic.entity-schema
   (:require [datomic.api :as d]
-            [entity-schema.datomic.datomic-helper :as dh]))
+            [entity-schema.datomic.datomic-helper :as dh]
+            [entity-schema.validation :as v]))
 
 
 ;TODO add in a check that there is at least one item in the entity
@@ -70,8 +71,10 @@
   (if (= (count natural-key) 1)
     (let [key (first natural-key)
           value (get entity key)]
-      (assert value "Value should not be null")
-      (:db/id (d/pull db [:db/id] [key value])))
+      (if (nil? value)
+        [(v/error :error.type/missing-natrual-key "Missing natural key" {:error/natural-key natural-key
+                                                                         :error/entity entity}) true]
+        [(:db/id (d/pull db [:db/id] [key value])) false]))
     (let [query-map (build-query-map db natural-key entity)
           r (d/query query-map)]
       (if (not (empty? r))
@@ -81,7 +84,7 @@
                                          "query-map\n" (with-out-str (clojure.pprint/pprint query-map)) "\n"
                                          "result:\n" (with-out-str (clojure.pprint/pprint r))))
 
-            (->> r (first) (first)))))))
+            [(->> r (first) (first)) false])))))
 
 (defn transact-entities [conn tx-data]
   (d/transact conn tx-data))

@@ -4,8 +4,6 @@
             [entity-schema.validation :as v]
             [entity-schema.util :as u]))
 
-
-
 (defn assoc-if-not-nil [map key value]
   (if (nil? value) map (assoc map key value)))
 
@@ -27,24 +25,24 @@
   ([id-cache ident natural-key-value-set from-db? id]
    (merge-id-caches id-cache {ident {natural-key-value-set [from-db? id]}})))
 
-
-
 (defn get-id [db {:keys [:db/ident :entity.schema/part] :as schema} command-data entity id-cache]
   "return [entity-in-db? db-id id-cache errored?]"
-  (let [natural-key-list (u/natural-key-coll schema [])
+  (let [natural-key-list (v/natural-key-coll schema [])
         natural-key-map (select-keys entity natural-key-list)
         [from-db? cached-id] (get-in id-cache [ident natural-key-map])]
     (if cached-id
       [from-db? cached-id id-cache false]
-      (let [db-id (es/look-up-entity-id db natural-key-list entity)
-            entity-in-db? (not (nil? db-id))
-            command (u/get-command command-data schema)
-            [validated-db-id db-id-errored?] (v/validate-db-id command schema db-id)]
-        (if db-id-errored?
-          [entity-in-db? validated-db-id id-cache db-id-errored?]
-          (let [id (if entity-in-db? validated-db-id (es/generate-db-id (:db/ident part)))
-                upd-id-cache (update-id-cache id-cache ident natural-key-map entity-in-db? id)]
-            [entity-in-db? id upd-id-cache db-id-errored?]))))))
+      (let [[db-id look-up-errored?] (es/look-up-entity-id db natural-key-list entity)]
+        (if look-up-errored?
+          [false db-id id-cache look-up-errored?]
+          (let [entity-in-db? (not (nil? db-id))
+              command (u/get-command command-data schema)
+              [validated-db-id db-id-errored?] (v/validate-db-id command schema db-id)]
+          (if db-id-errored?
+            [entity-in-db? validated-db-id id-cache db-id-errored?]
+            (let [id (if entity-in-db? validated-db-id (es/generate-db-id (:db/ident part)))
+                  upd-id-cache (update-id-cache id-cache ident natural-key-map entity-in-db? id)]
+              [entity-in-db? id upd-id-cache db-id-errored?]))))))))
 
 (declare process-entity)
 
@@ -112,7 +110,7 @@
   [entity id-cache errored?]"
   ([db {:keys [:entity.schema/fields] :as schema} command-data entity id-cache entity-cache]
    (assert (not (nil? fields)))
-   (let [natural-key-set (u/natural-key-coll schema #{})
+   (let [natural-key-set (v/natural-key-coll schema #{})
          [key-fields non-key-fields] (split-fields-by-natural-key fields natural-key-set)
          [key-field-entity key-field-id-cache key-field-entity-cache key-fields-errored?]
          (process-fields db false command-data entity id-cache entity-cache key-fields)]
@@ -166,7 +164,7 @@
 (defn combine-result
   "Combine the results from two parrallel runs"
   ([] [[] {} {} false])
-  ([[l-es l-id-cache l-entity-cache l-errored?]  [r-es r-id-cache r-entity-cache r-errored?]]
+  ([[l-es l-id-cache l-entity-cache l-errored?] [r-es r-id-cache r-entity-cache r-errored?]]
    (let [cache-intersect (intersect-id-cache l-id-cache r-id-cache)
          merged (merge-id-caches l-id-cache r-id-cache cache-intersect)
          [l-id-map r-id-map] (->> cache-intersect
