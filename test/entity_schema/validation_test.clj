@@ -29,6 +29,8 @@
         (is (= errored? res-errored?) test-desc)
         (is (= expected-ouput final-result) test-desc)))))
 
+(= (d/tempid :db.part/entity-schema -4) (d/tempid :db.part/entity-schema -4))
+
 (def string-field
   {:db/ident       :test-entity/string-field
    :db/valueType   :db.type/string
