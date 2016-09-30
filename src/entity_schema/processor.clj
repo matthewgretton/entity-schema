@@ -80,6 +80,8 @@
     [#{} id-cache entity-cache false]
     many-values))
 
+
+
 (defn process-value [db entity-in-db? command-data field value id-cache entity-cache]
   "Get id and value for the field from the entity
   returns [id value id-cache errored?]"
@@ -87,7 +89,8 @@
     (if cardinality-errored?
       [cardinality-validated-value id-cache entity-cache cardinality-errored?]
       (if (u/cardinality-many? field)
-        (process-many-values db entity-in-db? command-data field cardinality-validated-value id-cache entity-cache)
+        (let [man-values (v/to-coll-not-map cardinality-validated-value)]
+          (process-many-values db entity-in-db? command-data field man-values id-cache entity-cache))
         (process-one-value db entity-in-db? command-data field cardinality-validated-value id-cache entity-cache)))))
 
 (defn split-fields-by-natural-key [fields natural-key-set]

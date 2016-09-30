@@ -178,66 +178,7 @@
 
 
 
-(let [left-input
-      [[[{:db/id           (d/tempid :db.part/user -1)
-          :entity/code     {:db/id 123 :code/value "A"}
-          :entity/unq-key1 "Bob"
-          :entity/unq-key2 2} false]]
 
-       {:entity.schema/test1
-        {{:entity/unq-key1 "Bob"
-          :entity/unq-key2 2}
-         [false (d/tempid :db.part/user -1)],
-         }
-        :entity.schema/test2
-        {{:code/value "A"}
-         [true 123],
-         }}
-       nil
-       false
-       ]
-      ;;TODO add one in that comes from the db and then try also with ones that do/don't exist on the
-      ;;TODO right or left hand side.
-      right-input [[[{:db/id           (d/tempid :db.part/user -2)
-                      :entity/code     {:db/id 123 :code/value "A"}
-                      :entity/unq-key1 "Bob"
-                      :entity/unq-key2 2} false]
-                    ]
-
-                   {:entity.schema/test1
-                    {{:entity/unq-key1 "Bob"
-                      :entity/unq-key2 2}
-                     [false (d/tempid :db.part/user -2)],
-                     }
-                    :entity.schema/test2
-                    {{:code/value "A"}
-                     [true 123],
-                     }}
-                   nil
-                   false
-                   ]
-
-      result (p/combine-result left-input right-input)
-      top-id (:db/id (first (first (first result))))
-      expected [[[{:db/id           top-id
-                   :entity/code     {:db/id 123, :code/value "A"},
-                   :entity/unq-key1 "Bob",
-                   :entity/unq-key2 2}
-                  false]
-                 [{:db/id           top-id
-                   :entity/code     {:db/id 123, :code/value "A"},
-                   :entity/unq-key1 "Bob",
-                   :entity/unq-key2 2}
-                  false]]
-                {:entity.schema/test1
-                 {{:entity/unq-key1 "Bob", :entity/unq-key2 2}
-                  [false top-id]},
-                 :entity.schema/test2
-                 {{:code/value "A"}
-                  [true 123]}}
-                nil
-                false]]
-  (clojure.data/diff expected result))
 
 
 

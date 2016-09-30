@@ -91,7 +91,96 @@
                       {:db/id {:error/message "Missing natural key"
                                :error/type    :error.type/missing-natrual-key
                                :error/data    {:error/entity      {}
-                                               :error/natural-key [:test-entity/string-field]}}}))
+                                               :error/natural-key [:test-entity/string-field]}}})
+
+  (test-single-entity "Cardinality Test"
+                      [string-field] {:db/ident                  :entity.schema/test
+                                      :entity.schema/part        :db.part/entity-schema
+                                      :entity.schema/fields      [{:field/nullable? true
+                                                                   :field/schema    :test-entity/string-field}]
+                                      :entity.schema/natural-key [:test-entity/string-field]} insert-command-map
+                      {:test-entity/string-field ["Bob" "Ted"]}
+                      {:test-entity/string-field {:error/data    {:value ["Bob"
+                                                                          "Ted"]}
+                                                  :error/message "Value associated with cardinality one field should not be a collection"
+                                                  :error/type    :error.type/cardinality}})
+
+  (test-single-entity "Single Value input for Cardinality many field should be fine"
+                      [{:db/ident       :test-entity/string-field
+                        :db/valueType   :db.type/string
+                        :db/cardinality :db.cardinality/many
+                        :db/unique      :db.unique/identity}]
+                      {:db/ident                  :entity.schema/test
+                       :entity.schema/part        :db.part/entity-schema
+                       :entity.schema/fields      [{:field/nullable? true
+                                                    :field/schema    :test-entity/string-field}]
+                       :entity.schema/natural-key [:test-entity/string-field]} insert-command-map
+                      {:test-entity/string-field "Bob"}
+                      {:test-entity/string-field #{"Bob"}}))
+
+
+(deftest test-combine
+  (let [left-input
+        [[[{:db/id           (d/tempid :db.part/user -1)
+            :entity/code     {:db/id 123 :code/value "A"}
+            :entity/unq-key1 "Bob"
+            :entity/unq-key2 2} false]]
+
+         {:entity.schema/test1
+          {{:entity/unq-key1 "Bob"
+            :entity/unq-key2 2}
+           [false (d/tempid :db.part/user -1)],
+           }
+          :entity.schema/test2
+          {{:code/value "A"}
+           [true 123],
+           }}
+         nil
+         false
+         ]
+        ;;TODO add one in that comes from the db and then try also with ones that do/don't exist on the
+        ;;TODO right or left hand side.
+        right-input [[[{:db/id           (d/tempid :db.part/user -2)
+                        :entity/code     {:db/id 123 :code/value "A"}
+                        :entity/unq-key1 "Bob"
+                        :entity/unq-key2 2} false]
+                      ]
+                     {:entity.schema/test1
+                      {{:entity/unq-key1 "Bob"
+                        :entity/unq-key2 2}
+                       [false (d/tempid :db.part/user -2)],
+                       }
+                      :entity.schema/test2
+                      {{:code/value "A"}
+                       [true 123],
+                       }}
+                     nil
+                     false]
+        result (p/combine-result left-input right-input)
+        top-id (:db/id (first (first (first result))))
+        expected [[[{:db/id           top-id
+                     :entity/code     {:db/id 123, :code/value "A"},
+                     :entity/unq-key1 "Bob",
+                     :entity/unq-key2 2}
+                    false]
+                   [{:db/id           top-id
+                     :entity/code     {:db/id 123, :code/value "A"},
+                     :entity/unq-key1 "Bob",
+                     :entity/unq-key2 2}
+                    false]]
+                  {:entity.schema/test1
+                   {{:entity/unq-key1 "Bob", :entity/unq-key2 2}
+                    [false top-id]},
+                   :entity.schema/test2
+                   {{:code/value "A"}
+                    [true 123]}}
+                  nil
+                  false]]
+    (is (= expected result))))
+
+
+
+
 
 
 
