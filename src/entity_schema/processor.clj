@@ -136,6 +136,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn replace-id [id-map es]
+
   (clojure.walk/postwalk (fn [x]
                            (if (and (coll? x) (= (first x) :db/id) (contains? id-map (second x)))
                              [:db/id (get id-map (second x))]
@@ -212,7 +213,7 @@
   Note that entities must be reduceable to take advantage of multiple cores so a lazy seq will not take advantage"
   ([db schema command-data entities]
    (let [[es id-cache _ errored?]
-         (r/fold 1 combine-result
+         (r/fold combine-result
                  (fn [[es id-cache entity-cache current-errored?] entity]
                    (let [[processed-entity updated-id-cache updated-entity-cache errored?] (process-entity db schema command-data entity id-cache entity-cache)]
                      [(conj es [processed-entity errored?]) updated-id-cache updated-entity-cache (or current-errored? errored?)]))

@@ -6,7 +6,61 @@
             [entity-schema.processor :as p]
             [entity-schema.datomic.entity-schema :as es]
             [entity-schema.datomic.entity-schema-data :as esd]
-            [entity-schema.validation :as v]))
+            [entity-schema.validation :as v])
+  (:import (java.util Map)))
+
+
+(require 'spyscope.core)
+
+(deftype MockDbId [id ids-map]
+  Map
+  (get [_ k]
+    (get id k))
+  (toString [_]
+    (.toString id))
+  (entrySet [_]
+    (.entrySet id))
+  (equals [_ r]
+    (if (= (:part id) (:part r))
+      (if-let [cached-r (get @ids-map id)]
+        (and (= (:part r) (:part cached-r))
+             (= (:idx r) (:idx cached-r)))
+        (do (swap! ids-map assoc id r)
+            true))
+      false)))
+
+(def id-gen (atom -1000050))
+
+
+(defn mock-tempid
+  ([part ids-map]
+   (MockDbId. {:part part :idx (swap! id-gen dec)} ids-map))
+  ([part n ids-map]
+   (MockDbId. {:part part :idx n} ids-map)))
+
+
+
+(defn test-entities [test-desc fields schema command-data ids-map input-entities expected-output-entities]
+  (let [uri (dh/create-in-mem-db-uri "entity-db")
+        conn (do (d/create-database uri) (d/connect uri))]
+    @(d/transact conn (->> fields (map #(dh/create-field %)) (into [])))
+    (let [db (d/db conn)
+          datomic-compat-schema (schema-helper/make-compatible-with-datomic db schema)]
+      @(d/transact conn esd/all-fields)
+      @(d/transact conn [datomic-compat-schema])
+      (let [pulled-schema (es/pull-entity-schema (d/db conn) (:db/ident datomic-compat-schema))]
+        (with-redefs [d/tempid (fn
+                                 ([part]
+                                  (mock-tempid part ids-map))
+                                 ([part n]
+                                  (mock-tempid part n ids-map)))]
+          (let [output-entities (p/process-all-entities db pulled-schema command-data input-entities)]
+            (d/delete-database uri)
+            (is (= output-entities expected-output-entities) test-desc)))))))
+
+
+
+
 
 ;;test method
 (defn test-single-entity [test-desc fields schema command-data input-entity expected-ouput]
@@ -29,7 +83,7 @@
         (is (= errored? res-errored?) test-desc)
         (is (= expected-ouput final-result) test-desc)))))
 
-(= (d/tempid :db.part/entity-schema -4) (d/tempid :db.part/entity-schema -4))
+
 
 (def string-field
   {:db/ident       :test-entity/string-field
@@ -54,6 +108,44 @@
 (def insert-command-map
   {:command-map     {:entity.schema/test :command/insert}
    :default-command :command/look-up})
+
+
+(deftest bob
+  (let [ids-map (atom {})]
+    (test-entities "Valid"
+                   [{:db/ident       :test-entity/string-field
+                     :db/valueType   :db.type/string
+                     :db/cardinality :db.cardinality/one
+                     :db/unique      :db.unique/identity}]
+
+                   {:db/ident                  :entity.schema/test
+                    :entity.schema/part        :db.part/entity-schema
+                    :entity.schema/fields      [{:field/nullable? true
+                                                 :field/schema    :test-entity/string-field}]
+                    :entity.schema/natural-key [:test-entity/string-field]}
+
+                   insert-command-map
+                   ids-map
+                   [{:test-entity/string-field "Bob12"}
+                    {:test-entity/string-field "Bob12"}]
+                   [[[{:test-entity/string-field "Bob12"
+                       :db/id                    (mock-tempid :db.part/entity-schema -1 ids-map)} false]
+                     [{:test-entity/string-field "Bob12"
+                       :db/id                    (mock-tempid :db.part/entity-schema -1 ids-map)} false]
+                     ] false]))
+
+  (let [ids-map (atom {})]
+    (test-entities "Valid"
+                   [string-field] simple-schema-required-field insert-command-map
+                   ids-map
+                   [{:test-entity/string-field "Bob12"}]
+                   [[[{:test-entity/string-field "Bob12"
+                       :db/id                    (mock-tempid :db.part/entity-schema ids-map)} false]] false]))
+  )
+
+
+
+
 
 (deftest single-entity-validation-test
 
@@ -104,7 +196,7 @@
                                                                           "Ted"]}
                                                   :error/message "Value associated with cardinality one field should not be a collection"
                                                   :error/type    :error.type/cardinality}})
-
+  (->> (d/tempid :db.part/user) (into {}))
   (test-single-entity "Single Value input for Cardinality many field should be fine"
                       [{:db/ident       :test-entity/string-field
                         :db/valueType   :db.type/string
@@ -116,7 +208,23 @@
                                                     :field/schema    :test-entity/string-field}]
                        :entity.schema/natural-key [:test-entity/string-field]} insert-command-map
                       {:test-entity/string-field "Bob"}
-                      {:test-entity/string-field #{"Bob"}}))
+                      {:test-entity/string-field #{"Bob"}})
+
+  ;(test-single-entity "Test expanding"
+  ;                    [{:db/ident       :test-entity/ref-field
+  ;                      :db/valueType   :db.type/ref
+  ;                      :db/cardinality :db.cardinality/one
+  ;                      :db/unique      :db.unique/identity}]
+  ;                    {:db/ident                  :entity.schema/test
+  ;                     :entity.schema/part        :db.part/entity-schema
+  ;                     :entity.schema/fields      [{:field/nullable?     true
+  ;                                                  :field/schema        :test-entity/ref-field
+  ;                                                  :field/entity-schema {}}]
+  ;                     :entity.schema/natural-key [:test-entity/string-field]} insert-command-map
+  ;                    {:test-entity/string-field "Bob"}
+  ;                    {:test-entity/string-field #{"Bob"}})
+
+  )
 
 
 (deftest test-combine
@@ -484,3 +592,9 @@
 ;                                 (v/validate
 ;                                   :entity.schema.type/test-type
 ;                                   {:test-entity/string-field "Bob"})))))))
+
+
+
+
+
+
