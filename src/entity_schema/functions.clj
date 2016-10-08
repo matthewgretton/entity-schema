@@ -1,4 +1,4 @@
-(ns entity-schema.util
+(ns entity-schema.functions
   (:require [entity-schema.datomic.entity-schema :as es]))
 
 

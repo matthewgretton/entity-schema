@@ -2,7 +2,7 @@
   (:require [clojure.core.reducers :as r]
             [entity-schema.datomic.entity-schema :as es]
             [entity-schema.validation :as v]
-            [entity-schema.util :as u]))
+            [entity-schema.functions :as u]))
 
 (defn assoc-if-not-nil [map key value]
   (if (nil? value) map (assoc map key value)))

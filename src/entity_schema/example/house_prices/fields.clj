@@ -4,7 +4,7 @@
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [entity-schema.processor :as p]
-            [entity-schema.util :as u]
+            [entity-schema.functions :as u]
             [datomic.api :as d]
             [clojure.core.reducers :as r]
             [entity-schema.validation :as v]

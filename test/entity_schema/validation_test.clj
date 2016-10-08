@@ -6,136 +6,44 @@
             [entity-schema.processor :as p]
             [entity-schema.datomic.entity-schema :as es]
             [entity-schema.datomic.entity-schema-data :as esd]
-            [entity-schema.validation :as v])
-  (:import (java.util Map)))
+            [entity-schema.util.bimap :as bimap]
+            [entity-schema.util.core :as util]))
 
-(defn flatten-upto-key [m key]
-  (letfn [(flatten-upto-key* [a p ks m]
-            (if (= p key)
-              (assoc a ks m)
-              (if (map? m)
-                (reduce into (map (fn [[k v]] (flatten-upto-key* a k (conj ks k) v)) (seq m)))
-                a)))]
-    (flatten-upto-key* {} nil [] m)))
-
-
-(defn create-empty-bi-map []
-  [{} {}])
-
-(defn assoc-bi-map [[kv vk] k v]
-  [(assoc kv k v) (assoc vk v k)])
-
-(defn get-value [[kv _] k]
-  (get kv k))
-
-(defn get-key [[_ vk] v]
-  (get vk v))
-
-
-
-
-(defn transform [actual expected input-exp-act-id-bi-map]
-  (->> (flatten-upto-key expected :db/id)
-       (reduce (fn [[exp-act-id-bi-map output] [expected-id-path expected-id]]
+(defn transform [actual expected input-exp-act-bimap]
+  (->> (util/flatten-upto-key expected :db/id)
+       (reduce (fn [[exp-act-bimap output] [expected-id-path expected-id]]
                  (if-let [actual-id (get-in actual expected-id-path)]
-                   (let [mapped-act-id  (get-key exp-act-id-bi-map expected-id)
-                         mapped-exp-id (get-value exp-act-id-bi-map actual-id)]
+                   (cond
 
-                     (cond
-                           ;;consistent with mapping
-                           (and (= actual-id mapped-act-id) (= expected-id mapped-exp-id))
-                           [exp-act-id-bi-map (assoc-in output expected-id-path expected-id)]
+                     ;; consistently unmapped, but partitions are the same
+                     (and (bimap/consistently-unmapped? exp-act-bimap expected-id actual-id)
+                          (= (:part actual-id) (:part expected-id)))
+                     [(bimap/assoc exp-act-bimap expected-id actual-id) (assoc-in output expected-id-path expected-id)]
 
-                           ;; both unmapped, but partitions are the same
-                           (and (nil? mapped-act-id) (nil? mapped-exp-id)
-                                (= (:part actual-id) (:part expected-id)))
-                           [(assoc-bi-map exp-act-id-bi-map actual-id expected-id)
-                            (assoc-in output expected-id-path expected-id)]
+                     ;; consistently mapped
+                     (bimap/consistently-mapped? exp-act-bimap expected-id actual-id)
+                     [exp-act-bimap (assoc-in output expected-id-path expected-id)]
 
-                           ;; there's an inconsistency
-                           :else
-                           [exp-act-id-bi-map
-                            (->> (assoc actual-id :idx {:actual-id     actual-id
-                                                        :expected-id   expected-id
-                                                        :mapped-act-id mapped-act-id
-                                                        :mapped-exp-id mapped-exp-id})
-                                 (assoc-in output expected-id-path))]))
-                   [exp-act-id-bi-map output])) [input-exp-act-id-bi-map actual])))
-
-
-(and (= {:part :bob, :idx 121} {:part :bob, :idx 122}) (not= {:part :bob, :idx 425} nil))
+                     ;; there's an inconsistency between the mapping and the inputs
+                     :else
+                     [exp-act-bimap (->> (assoc actual-id :idx {:actual-id     actual-id
+                                                                :expected-id   expected-id
+                                                                :mapped-act-id (bimap/get-value exp-act-bimap expected-id)
+                                                                :mapped-exp-id (bimap/get-key exp-act-bimap actual-id)})
+                                         (assoc-in output expected-id-path))])
+                   [exp-act-bimap output])) [input-exp-act-bimap actual])))
 
 (defn transform-all [actuals expecteds]
   (->> (map vector actuals expecteds)
        (reduce (fn [[exp-act-id-bi-map output-coll] [actual expected]]
                  (let [[new-exp-act-id-bi-map output] (transform actual expected exp-act-id-bi-map)]
-                   [new-exp-act-id-bi-map (conj output-coll output)])) [(create-empty-bi-map) []])
+                   [new-exp-act-id-bi-map (conj output-coll output)])) [(bimap/create-empty) []])
        (second)))
-
-;;should work fine
-(transform-all [{:db/id {:part :bob :idx 122}}
-                {:db/id {:part :bob :idx 122}}]
-
-               [{:db/id {:part :bob :idx 425}}
-                {:db/id {:part :bob :idx 425}}])
-
-
-(transform-all [{:db/id {:part :bob :idx 122}}
-                {:db/id {:part :ted :idx 122}}]
-
-               [{:db/id {:part :bob :idx 425}}
-                {:db/id {:part :bob :idx 425}}])
-
-;; should fail
-(transform-all [{:db/id {:part :bob :idx 122}}
-                {:db/id {:part :bob :idx 121}}]
-
-               [{:db/id {:part :bob :idx 425}}
-                {:db/id {:part :bob :idx 425}}])
-
-;;should fail
-(transform-all [{:db/id {:part :bob :idx 122}}
-                {:db/id {:part :bob :idx 122}}]
-
-               [{:db/id {:part :bob :idx 424}}
-                {:db/id {:part :bob :idx 425}}])
-
 
 
 (require 'spyscope.core)
 
-
-
-
-(deftype MockDbId [id ids-map]
-  Map
-  (get [_ k]
-    (get id k))
-  (toString [_]
-    (.toString id))
-  (entrySet [_]
-    (.entrySet id))
-  (equals [_ r]
-    (if (= (:part id) (:part r))
-      (if-let [cached-r (get @ids-map id)]
-        (and (= (:part r) (:part cached-r))
-             (= (:idx r) (:idx cached-r)))
-        (do (swap! ids-map assoc id r)
-            true))
-      false)))
-
-(def id-gen (atom -1000050))
-
-
-(defn mock-tempid
-  ([part ids-map]
-   (MockDbId. {:part part :idx (swap! id-gen dec)} ids-map))
-  ([part n ids-map]
-   (MockDbId. {:part part :idx n} ids-map)))
-
-
-
-(defn test-entities [test-desc fields schema command-data ids-map input-entities expected-output-entities]
+(defn test-entities [test-desc fields schema command-data input-entities [expected-pairs expected-errored?]]
   (let [uri (dh/create-in-mem-db-uri "entity-db")
         conn (do (d/create-database uri) (d/connect uri))]
     @(d/transact conn (->> fields (map #(dh/create-field %)) (into [])))
@@ -144,41 +52,22 @@
       @(d/transact conn esd/all-fields)
       @(d/transact conn [datomic-compat-schema])
       (let [pulled-schema (es/pull-entity-schema (d/db conn) (:db/ident datomic-compat-schema))]
-        (with-redefs [d/tempid (fn
-                                 ([part]
-                                  (mock-tempid part ids-map))
-                                 ([part n]
-                                  (mock-tempid part n ids-map)))]
-          (let [output-entities (p/process-all-entities db pulled-schema command-data input-entities)]
-            (d/delete-database uri)
-            (is (= output-entities expected-output-entities) test-desc)))))))
-
-
-
-
+        (let [[actual-pairs actual-errored?] (p/process-all-entities db pulled-schema command-data input-entities)]
+          (d/delete-database uri)
+          (let [actual-entities (map first actual-pairs)
+                expected-entities (map first expected-pairs)
+                actual-errors (map second actual-pairs)
+                transformed-actual-entities (transform-all actual-entities expected-entities)
+                transformed-actual-pairs (->> (map vector transformed-actual-entities actual-errors) (into []))]
+            (is (= [transformed-actual-pairs actual-errored?]
+                   [expected-pairs expected-errored?]) test-desc)))))))
 
 ;;test method
-(defn test-single-entity [test-desc fields schema command-data input-entity expected-ouput]
-  (let [uri (dh/create-in-mem-db-uri "entity-db")
-        conn (do (d/create-database uri) (d/connect uri))]
-    @(d/transact conn (->> fields (map #(dh/create-field %)) (into [])))
+(defn test-valid-single-entity [test-desc fields schema command-data input-entity expected-ouput]
+  (test-entities test-desc fields schema command-data [input-entity] [[[expected-ouput false]] false]))
 
-    (let [db (d/db conn)
-          datomic-compat-schema (schema-helper/make-compatible-with-datomic db schema)]
-      @(d/transact conn esd/all-fields)
-      @(d/transact conn [datomic-compat-schema])
-      (let [pulled-schema (es/pull-entity-schema (d/db conn) (:db/ident datomic-compat-schema))
-            [pairs errored?] (p/process-all-entities db pulled-schema command-data [input-entity])
-            [result res-errored?] (first pairs)
-            id (:db/id result)
-            final-result (if (v/error? id) result (dissoc result :db/id))]
-        (d/delete-database uri)
-        (if (and (contains? result :db/id) (not (v/error? id)))
-          (is (= (:part id) (:entity.schema/part schema)) test-desc))
-        (is (= errored? res-errored?) test-desc)
-        (is (= expected-ouput final-result) test-desc)))))
-
-
+(defn test-invalid-single-entity [test-desc fields schema command-data input-entity expected-ouput]
+  (test-entities test-desc fields schema command-data [input-entity] [[[expected-ouput true]] true]))
 
 (def string-field
   {:db/ident       :test-entity/string-field
@@ -205,65 +94,60 @@
    :default-command :command/look-up})
 
 
-(deftest bob
-  (let [ids-map (atom {})]
-    (test-entities "Valid"
-                   [{:db/ident       :test-entity/string-field
-                     :db/valueType   :db.type/string
-                     :db/cardinality :db.cardinality/one
-                     :db/unique      :db.unique/identity}]
+(deftest multiple-entity-validation-tests
+  (test-entities "Valid"
+                 [{:db/ident       :test-entity/string-field
+                   :db/valueType   :db.type/string
+                   :db/cardinality :db.cardinality/one
+                   :db/unique      :db.unique/identity}]
 
-                   {:db/ident                  :entity.schema/test
-                    :entity.schema/part        :db.part/entity-schema
-                    :entity.schema/fields      [{:field/nullable? true
-                                                 :field/schema    :test-entity/string-field}]
-                    :entity.schema/natural-key [:test-entity/string-field]}
+                 {:db/ident                  :entity.schema/test
+                  :entity.schema/part        :db.part/entity-schema
+                  :entity.schema/fields      [{:field/nullable? true
+                                               :field/schema    :test-entity/string-field}]
+                  :entity.schema/natural-key [:test-entity/string-field]}
 
-                   insert-command-map
-                   ids-map
-                   [{:test-entity/string-field "Bob12"}
-                    {:test-entity/string-field "Bob12"}]
-                   [[[{:test-entity/string-field "Bob12"
-                       :db/id                    (mock-tempid :db.part/entity-schema -1 ids-map)} false]
-                     [{:test-entity/string-field "Bob12"
-                       :db/id                    (mock-tempid :db.part/entity-schema -1 ids-map)} false]
-                     ] false]))
+                 insert-command-map
+                 [{:test-entity/string-field "Bob12"}
+                  {:test-entity/string-field "Bob12"}]
+                 [[[{:test-entity/string-field "Bob12"
+                     :db/id                    (d/tempid :db.part/entity-schema -1)} false]
+                   [{:test-entity/string-field "Bob12"
+                     :db/id                    (d/tempid :db.part/entity-schema -1)} false]
+                   ] false])
 
-  (let [ids-map (atom {})]
-    (test-entities "Valid"
-                   [string-field] simple-schema-required-field insert-command-map
-                   ids-map
-                   [{:test-entity/string-field "Bob12"}]
-                   [[[{:test-entity/string-field "Bob12"
-                       :db/id                    (mock-tempid :db.part/entity-schema ids-map)} false]] false]))
-  )
+  (test-entities "Valid"
+                 [string-field] simple-schema-required-field insert-command-map
+                 [{:test-entity/string-field "Bob12"}]
+                 [[[{:test-entity/string-field "Bob12"
+                     :db/id                    (d/tempid :db.part/entity-schema)} false]] false]))
 
 
 
 
+(deftest single-entity-validation-tests
 
-(deftest single-entity-validation-test
+  (test-valid-single-entity "Valid"
+                            [string-field] simple-schema-required-field insert-command-map
+                            {:test-entity/string-field "Bob12"}
+                            {:db/id                    (d/tempid :db.part/entity-schema)
+                             :test-entity/string-field "Bob12"})
 
-  (test-single-entity "Valid"
-                      [string-field] simple-schema-required-field insert-command-map
-                      {:test-entity/string-field "Bob12"}
-                      {:test-entity/string-field "Bob12"})
+  (test-invalid-single-entity "Incorrect field type"
+                            [string-field] simple-schema-required-field insert-command-map
+                            {:test-entity/string-field 12}
+                            {:test-entity/string-field {:error/data    {:datomic-type :db.type/string
+                                                                        :valid-types  #{java.lang.String}
+                                                                        :value        12
+                                                                        :value-type   java.lang.Long}
+                                                        :error/message "Incorrect Value Type"
+                                                        :error/type    :error.type/incorrect-type}})
 
-  (test-single-entity "Incorrect field type"
-                      [string-field] simple-schema-required-field insert-command-map
-                      {:test-entity/string-field 12}
-                      {:test-entity/string-field {:error/data    {:datomic-type :db.type/string
-                                                                  :valid-types  #{java.lang.String}
-                                                                  :value        12
-                                                                  :value-type   java.lang.Long}
-                                                  :error/message "Incorrect Value Type"
-                                                  :error/type    :error.type/incorrect-type}})
-
-  (test-single-entity "Missing required field"
-                      [string-field] simple-schema-required-field insert-command-map
-                      {}
-                      {:test-entity/string-field {:error/message "Required Field"
-                                                  :error/type    :error.type/required-field}})
+  (test-invalid-single-entity "Missing required field"
+                            [string-field] simple-schema-required-field insert-command-map
+                            {}
+                            {:test-entity/string-field {:error/message "Required Field"
+                                                        :error/type    :error.type/required-field}})
 
   ;(test-single-entity "Function test"
   ;                    [string-field] simple-schema-optional-field insert-command-map
@@ -272,38 +156,39 @@
   ;                                                :error/type    :error.type/required-field}})
 
   ;; What do we need to happen here?
-  (test-single-entity "Missing (optional) natural key"
-                      [string-field] simple-schema-optional-field insert-command-map
-                      {}
-                      {:db/id {:error/message "Missing natural key"
-                               :error/type    :error.type/missing-natrual-key
-                               :error/data    {:error/entity      {}
-                                               :error/natural-key [:test-entity/string-field]}}})
+  (test-invalid-single-entity "Missing (optional) natural key"
+                            [string-field] simple-schema-optional-field insert-command-map
+                            {}
+                            {:db/id {:error/message "Missing natural key"
+                                     :error/type    :error.type/missing-natrual-key
+                                     :error/data    {:error/entity      {}
+                                                     :error/natural-key [:test-entity/string-field]}}})
 
-  (test-single-entity "Cardinality Test"
-                      [string-field] {:db/ident                  :entity.schema/test
-                                      :entity.schema/part        :db.part/entity-schema
-                                      :entity.schema/fields      [{:field/nullable? true
-                                                                   :field/schema    :test-entity/string-field}]
-                                      :entity.schema/natural-key [:test-entity/string-field]} insert-command-map
-                      {:test-entity/string-field ["Bob" "Ted"]}
-                      {:test-entity/string-field {:error/data    {:value ["Bob"
-                                                                          "Ted"]}
-                                                  :error/message "Value associated with cardinality one field should not be a collection"
-                                                  :error/type    :error.type/cardinality}})
-  (->> (d/tempid :db.part/user) (into {}))
-  (test-single-entity "Single Value input for Cardinality many field should be fine"
-                      [{:db/ident       :test-entity/string-field
-                        :db/valueType   :db.type/string
-                        :db/cardinality :db.cardinality/many
-                        :db/unique      :db.unique/identity}]
-                      {:db/ident                  :entity.schema/test
-                       :entity.schema/part        :db.part/entity-schema
-                       :entity.schema/fields      [{:field/nullable? true
-                                                    :field/schema    :test-entity/string-field}]
-                       :entity.schema/natural-key [:test-entity/string-field]} insert-command-map
-                      {:test-entity/string-field "Bob"}
-                      {:test-entity/string-field #{"Bob"}})
+  (test-invalid-single-entity "Cardinality Test"
+                            [string-field] {:db/ident                  :entity.schema/test
+                                            :entity.schema/part        :db.part/entity-schema
+                                            :entity.schema/fields      [{:field/nullable? true
+                                                                         :field/schema    :test-entity/string-field}]
+                                            :entity.schema/natural-key [:test-entity/string-field]} insert-command-map
+                            {:test-entity/string-field ["Bob" "Ted"]}
+                            {:test-entity/string-field {:error/data    {:value ["Bob"
+                                                                                "Ted"]}
+                                                        :error/message "Value associated with cardinality one field should not be a collection"
+                                                        :error/type    :error.type/cardinality}})
+
+  (test-valid-single-entity "Single Value input for Cardinality many field should be fine"
+                            [{:db/ident       :test-entity/string-field
+                              :db/valueType   :db.type/string
+                              :db/cardinality :db.cardinality/many
+                              :db/unique      :db.unique/identity}]
+                            {:db/ident                  :entity.schema/test
+                             :entity.schema/part        :db.part/entity-schema
+                             :entity.schema/fields      [{:field/nullable? true
+                                                          :field/schema    :test-entity/string-field}]
+                             :entity.schema/natural-key [:test-entity/string-field]} insert-command-map
+                            {:test-entity/string-field "Bob"}
+                            {:db/id (d/tempid :db.part/entity-schema) 
+                             :test-entity/string-field #{"Bob"}})
 
   ;(test-single-entity "Test expanding"
   ;                    [{:db/ident       :test-entity/ref-field
