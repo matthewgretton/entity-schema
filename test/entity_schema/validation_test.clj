@@ -9,8 +9,103 @@
             [entity-schema.validation :as v])
   (:import (java.util Map)))
 
+(defn flatten-upto-key [m key]
+  (letfn [(flatten-upto-key* [a p ks m]
+            (if (= p key)
+              (assoc a ks m)
+              (if (map? m)
+                (reduce into (map (fn [[k v]] (flatten-upto-key* a k (conj ks k) v)) (seq m)))
+                a)))]
+    (flatten-upto-key* {} nil [] m)))
+
+
+(defn create-empty-bi-map []
+  [{} {}])
+
+(defn assoc-bi-map [[kv vk] k v]
+  [(assoc kv k v) (assoc vk v k)])
+
+(defn get-value [[kv _] k]
+  (get kv k))
+
+(defn get-key [[_ vk] v]
+  (get vk v))
+
+
+
+
+(defn transform [actual expected input-exp-act-id-bi-map]
+  (->> (flatten-upto-key expected :db/id)
+       (reduce (fn [[exp-act-id-bi-map output] [expected-id-path expected-id]]
+                 (if-let [actual-id (get-in actual expected-id-path)]
+                   (let [mapped-act-id  (get-key exp-act-id-bi-map expected-id)
+                         mapped-exp-id (get-value exp-act-id-bi-map actual-id)]
+
+                     (cond
+                           ;;consistent with mapping
+                           (and (= actual-id mapped-act-id) (= expected-id mapped-exp-id))
+                           [exp-act-id-bi-map (assoc-in output expected-id-path expected-id)]
+
+                           ;; both unmapped, but partitions are the same
+                           (and (nil? mapped-act-id) (nil? mapped-exp-id)
+                                (= (:part actual-id) (:part expected-id)))
+                           [(assoc-bi-map exp-act-id-bi-map actual-id expected-id)
+                            (assoc-in output expected-id-path expected-id)]
+
+                           ;; there's an inconsistency
+                           :else
+                           [exp-act-id-bi-map
+                            (->> (assoc actual-id :idx {:actual-id     actual-id
+                                                        :expected-id   expected-id
+                                                        :mapped-act-id mapped-act-id
+                                                        :mapped-exp-id mapped-exp-id})
+                                 (assoc-in output expected-id-path))]))
+                   [exp-act-id-bi-map output])) [input-exp-act-id-bi-map actual])))
+
+
+(and (= {:part :bob, :idx 121} {:part :bob, :idx 122}) (not= {:part :bob, :idx 425} nil))
+
+(defn transform-all [actuals expecteds]
+  (->> (map vector actuals expecteds)
+       (reduce (fn [[exp-act-id-bi-map output-coll] [actual expected]]
+                 (let [[new-exp-act-id-bi-map output] (transform actual expected exp-act-id-bi-map)]
+                   [new-exp-act-id-bi-map (conj output-coll output)])) [(create-empty-bi-map) []])
+       (second)))
+
+;;should work fine
+(transform-all [{:db/id {:part :bob :idx 122}}
+                {:db/id {:part :bob :idx 122}}]
+
+               [{:db/id {:part :bob :idx 425}}
+                {:db/id {:part :bob :idx 425}}])
+
+
+(transform-all [{:db/id {:part :bob :idx 122}}
+                {:db/id {:part :ted :idx 122}}]
+
+               [{:db/id {:part :bob :idx 425}}
+                {:db/id {:part :bob :idx 425}}])
+
+;; should fail
+(transform-all [{:db/id {:part :bob :idx 122}}
+                {:db/id {:part :bob :idx 121}}]
+
+               [{:db/id {:part :bob :idx 425}}
+                {:db/id {:part :bob :idx 425}}])
+
+;;should fail
+(transform-all [{:db/id {:part :bob :idx 122}}
+                {:db/id {:part :bob :idx 122}}]
+
+               [{:db/id {:part :bob :idx 424}}
+                {:db/id {:part :bob :idx 425}}])
+
+
 
 (require 'spyscope.core)
+
+
+
 
 (deftype MockDbId [id ids-map]
   Map
