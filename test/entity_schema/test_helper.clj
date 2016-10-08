@@ -44,10 +44,14 @@
 
 (require 'spyscope.core)
 
-(defn test-entities [test-desc fields schema command-data input-entities [expected-pairs expected-errored?]]
+
+(defn test-entities
+
+  ([test-desc fields schema command-data input-entities [expected-pairs expected-errored?] data-transactions]
   (let [uri (dh/create-in-mem-db-uri "entity-db")
         conn (do (d/create-database uri) (d/connect uri))]
     @(d/transact conn (->> fields (map #(dh/create-field %)) (into [])))
+    @(d/transact conn data-transactions)
     (let [db (d/db conn)
           datomic-compat-schema (schema-helper/make-compatible-with-datomic db schema)]
       @(d/transact conn esd/all-fields)
@@ -62,11 +66,23 @@
                 transformed-actual-pairs (->> (map vector transformed-actual-entities actual-errors) (into []))]
             (is (= [transformed-actual-pairs actual-errored?]
                    [expected-pairs expected-errored?]) test-desc)))))))
+  ([test-desc fields schema command-data input-entities [expected-pairs expected-errored?]]
+   (test-entities test-desc fields schema command-data input-entities [expected-pairs expected-errored?] [])))
+
+
 
 ;;test method
-(defn test-valid-single-entity [test-desc fields schema command-data input-entity expected-ouput]
-  (test-entities test-desc fields schema command-data [input-entity] [[[expected-ouput false]] false]))
+(defn test-valid-single-entity
+  ([test-desc fields schema command-data input-entity expected-ouput data]
+  (test-entities test-desc fields schema command-data [input-entity] [[[expected-ouput false]] false]) data)
 
-(defn test-invalid-single-entity [test-desc fields schema command-data input-entity expected-ouput]
-  (test-entities test-desc fields schema command-data [input-entity] [[[expected-ouput true]] true]))
+  ([test-desc fields schema command-data input-entity expected-ouput]
+   (test-valid-single-entity test-desc fields schema command-data input-entity expected-ouput [])))
+
+(defn test-invalid-single-entity
+  ([test-desc fields schema command-data input-entity expected-ouput data]
+   (test-entities test-desc fields schema command-data [input-entity] [[[expected-ouput true]] true]) data)
+
+  ([test-desc fields schema command-data input-entity expected-ouput]
+   (test-invalid-single-entity test-desc fields schema command-data input-entity expected-ouput [])))
 
