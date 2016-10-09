@@ -10,6 +10,57 @@
             [clojure.test :refer :all]))
 
 
+
+
+
+(defn is-transacted-id? [id]
+  (or (integer? id) (keyword? id)))
+
+(defn transform [actual expected input-exp-act-bimap]
+  (->> (util/flatten-upto-key expected :db/id)
+       (reduce (fn [[exp-act-bimap output] [expected-id-path expected-id]]
+                 (if-let [actual-id (get-in actual expected-id-path)]
+                   (cond
+
+                     ;; consistently unmapped, but partitions are the same
+                     (and (bimap/consistently-unmapped? exp-act-bimap expected-id actual-id)
+                          (or (= (:part actual-id) (:part expected-id))
+                              (is-transacted-id? actual-id)))
+                     [(bimap/assoc exp-act-bimap expected-id actual-id) (assoc-in output expected-id-path expected-id)]
+
+                     ;; consistently mapped
+                     (bimap/consistently-mapped? exp-act-bimap expected-id actual-id)
+                     [exp-act-bimap (assoc-in output expected-id-path expected-id)]
+
+                     ;; there's an inconsistency between the mapping and the inputs
+                     :else
+                     [exp-act-bimap (->> (assoc actual-id :idx {:actual-id     actual-id
+                                                                :expected-id   expected-id
+                                                                :mapped-act-id (bimap/get-value exp-act-bimap expected-id)
+                                                                :mapped-exp-id (bimap/get-key exp-act-bimap actual-id)})
+                                         (assoc-in output expected-id-path))])
+                   [exp-act-bimap output])) [input-exp-act-bimap actual])))
+
+(defn transform-all [actuals expecteds]
+  (->> (map vector actuals expecteds)
+       (reduce (fn [[exp-act-id-bi-map output-coll] [actual expected]]
+                 (let [[new-exp-act-id-bi-map output] (transform actual expected exp-act-id-bi-map)]
+                   [new-exp-act-id-bi-map (conj output-coll output)])) [(bimap/create-empty) []])
+       (second)))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 (defn transform [actual expected input-exp-act-bimap]
   (->> (util/flatten-upto-key expected :db/id)
        (reduce (fn [[exp-act-bimap output] [expected-id-path expected-id]]

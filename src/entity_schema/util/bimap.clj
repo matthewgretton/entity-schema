@@ -5,8 +5,6 @@
 (defn create-empty []
   [{} {}])
 
-(defn assoc [[kv vk] k v]
-  [(clojure.core/assoc kv k v) (clojure.core/assoc vk v k)])
 
 (defn contains-value? [[_ vk] v]
   (contains? vk v))
@@ -33,8 +31,11 @@
         mapped-v (get-key m v)]
     (and (nil? mapped-k) (nil? mapped-v))))
 
-(defn partially-contains? [m k v]
-  (or (contains-key? m k) (contains-value? m v)))
-
 (defn not-contains? [m k v]
   (and (not (contains-key? m k)) (not (contains-value? m v))))
+
+
+(defn assoc [[kv vk] k v]
+  "Assocs the mapping. If a different but overlapping mapping aleady exists it will throw an exception... (or possibly)"
+  (assert (not-contains? [kv vk] k v ))
+  [(clojure.core/assoc kv k v) (clojure.core/assoc vk v k)])
