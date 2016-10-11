@@ -38,7 +38,6 @@
 
 
 ;; Core helper functions
-
 (defn flatten-for-key [m key]
   "Flatten all paths ending in the specified key.
 
@@ -70,6 +69,12 @@
 
 (require 'spyscope.core)
 
+(defn error
+  ([type]
+   {:error/type type})
+  ([type data]
+   (assoc (error type) :error/data data)))
+
 (defn make-entity-consistent
   "Make actual entity ids consistent with expected entity ids"
   ([actual-entity expected-entity]
@@ -93,17 +98,13 @@
 
                       ;; there's an inconsistency between the mapping and the inputs
                       :else
-                      (let [failed-id (if (is-temp-db-id? actual-id)
-                                        (assoc actual-id :idx {:actual-id     actual-id
-                                                               :expected-id   expected-id
-                                                               :mapped-act-id (bimap-get-value exp-act-bimap expected-id)
-                                                               :mapped-exp-id (bimap-get-key exp-act-bimap actual-id)})
-                                        {:actual-id     actual-id
-                                         :expected-id   expected-id
-                                         :mapped-act-id (bimap-get-value exp-act-bimap expected-id)
-                                         :mapped-exp-id (bimap-get-key exp-act-bimap actual-id)})]
-                        [exp-act-bimap (assoc-in output expected-id-path failed-id)]))
-                    [exp-act-bimap output])) [input-exp-act-bimap actual-entity]))))
+                      (let [error (error :error.type/inconsisten-ids {:actual-id     actual-id
+                                                                      :expected-id   expected-id
+                                                                      :mapped-act-id (bimap-get-value exp-act-bimap expected-id)
+                                                                      :mapped-exp-id (bimap-get-key exp-act-bimap actual-id)})]
+                        [exp-act-bimap (assoc-in output expected-id-path error)]))
+                    [exp-act-bimap (assoc-in output expected-id-path (error :error.type/missing-id))]))
+                [input-exp-act-bimap actual-entity]))))
 
 (defn make-all-entities-consistent [actual-entities expected-entities]
   "Make all actual entity ids consistent with the expected entity ids."
