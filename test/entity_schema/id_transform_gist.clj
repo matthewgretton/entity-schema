@@ -56,6 +56,8 @@
                 a)))]
     (flatten-upto-key* {} nil [] m)))
 
+
+
 ;; Actual code for comparing transaction data
 (defn is-transacted-db-id? [id]
   "Is this a transacted db id"
@@ -65,9 +67,6 @@
   "Is this a temp db id?"
   (and (map? id) (contains? id :part) (contains? id :idx)))
 
-
-
-(require 'spyscope.core)
 
 (defn error
   ([type]
@@ -98,12 +97,17 @@
 
                       ;; there's an inconsistency between the mapping and the inputs
                       :else
-                      (let [error (error :error.type/inconsisten-ids {:actual-id     actual-id
-                                                                      :expected-id   expected-id
-                                                                      :mapped-act-id (bimap-get-value exp-act-bimap expected-id)
-                                                                      :mapped-exp-id (bimap-get-key exp-act-bimap actual-id)})]
+                      (let [error (->> (error :error.type/inconsisten-ids
+                                              (->> {:expected-id   expected-id
+                                                    :actual-id     actual-id
+                                                    :mapped-act-id (bimap-get-value exp-act-bimap expected-id)
+                                                    :mapped-exp-id (bimap-get-key exp-act-bimap actual-id)}
+                                                   (filter (comp not nil? second))
+                                                   (into {})))
+
+                                       (into {}))]
                         [exp-act-bimap (assoc-in output expected-id-path error)]))
-                    [exp-act-bimap (assoc-in output expected-id-path (error :error.type/missing-id))]))
+                    [exp-act-bimap (assoc-in output expected-id-path (error :error.type/expected-id {:expected-id expected-id}))]))
                 [input-exp-act-bimap actual-entity]))))
 
 (defn make-all-entities-consistent [actual-entities expected-entities]
@@ -114,34 +118,51 @@
                    [new-exp-act-id-bi-map (conj output-coll output)])) [(bimap-create-empty) []])
        (second)))
 
+
+(require '[clojure.test :refer :all])
+
+(defn test-consistent [expected actual]
+  (let [actual-made-consistent (make-all-entities-consistent actual expected)]
+    (is (= expected actual-made-consistent))))
+
+(require '[datomic.api :as d])
+
 ;;should work fine
-(make-all-entities-consistent [{:db/id {:part :db.part/user :idx 122}}
-                               {:db/id {:part :db.part/user :idx 122}}]
 
-                              [{:db/id {:part :db.part/user :idx 425}}
-                               {:db/id {:part :db.part/user :idx 425}}])
 
-;;stuff
-(make-all-entities-consistent [{:db/id {:part :db.part/user :idx 122}}
-                               {:db/id {:part :db.part/custom :idx 122}}]
+(deftest test-examples
+  (test-consistent [{:db/id (d/tempid :db.part/user -1)}
+                    {:db/id (d/tempid :db.part/user -1)}]
 
-                              [{:db/id {:part :db.part/user :idx 425}}
-                               {:db/id {:part :db.part/user :idx 425}}])
+                   [{:db/id (d/tempid :db.part/user -2)}
+                    {:db/id (d/tempid :db.part/user -2)}])
 
-;; should fail
-(make-all-entities-consistent [{:db/id {:part :db.part/user :idx 122}}
-                               {:db/id {:part :db.part/user :idx 121}}]
+  (test-consistent [(d/tempid :db.part/user -1)] [{}])
 
-                              [{:db/id {:part :db.part/user :idx 425}}
-                               {:db/id {:part :db.part/user :idx 425}}])
+  ;; Inconsistent partition
+  (test-consistent [{:db/id (d/tempid :db.part/user -1)}
+                    {:db/id (d/tempid :db.part/custom -1)}]
 
-;;should fail
-(make-all-entities-consistent [{:db/id {:part :db.part/user :idx 122}}
-                               {:db/id {:part :db.part/user :idx 122}}]
+                   [{:db/id (d/tempid :db.part/user -2)}
+                    {:db/id (d/tempid :db.part/user -2)}])
 
-                              [{:db/id {:part :db.part/user :idx 424}}
-                               {:db/id {:part :db.part/user :idx 425}}])
+  ;; Inconsitent Ids
+  (test-consistent [{:db/id (d/tempid :db.part/user -1)}
+                    {:db/id (d/tempid :db.part/user -3)}]
 
-;; should fail as ids are different
-(make-all-entities-consistent [{:db/id :something}]
-                              [{:db/id :something2}])
+                   [{:db/id (d/tempid :db.part/user -2)}
+                    {:db/id (d/tempid :db.part/user -2)}])
+
+  ;; Inconsitent Ids
+  (test-consistent [{:db/id (d/tempid :db.part/user -1)}
+                    {:db/id (d/tempid :db.part/user -1)}]
+
+                   [{:db/id (d/tempid :db.part/user -4)}
+                    {:db/id (d/tempid :db.part/user -2)}])
+
+  ;; Inconsitent Ids
+  (test-consistent [{:db/id :something}]
+                   [{:db/id :something2}]))
+
+
+
