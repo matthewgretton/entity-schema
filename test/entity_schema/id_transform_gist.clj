@@ -1,4 +1,5 @@
-(ns entity-schema.id-transform-gist)
+(ns entity-schema.id-transform-gist
+  "Code to check the consistency of transaxion data output")
 
 ;; Functions for dealing with a bi-directional map modelled as a pair of maps. The first map, mapping to value,
 ;; and the second mapping value to key [kv vk]
@@ -74,10 +75,12 @@
   ([type data]
    (assoc (error type) :error/data data)))
 
-(defn make-entity-consistent
+(require '[spyscope.core])
+
+(defn validate-entity-equivalence
   "Make actual entity ids consistent with expected entity ids"
-  ([actual-entity expected-entity]
-   (make-entity-consistent actual-entity expected-entity (bimap-create-empty)))
+  ([left-entity right-entity]
+   (validate-entity-equivalence left-entity right-entity (bimap-create-empty)))
   ([actual-entity expected-entity input-exp-act-bimap]
    (->> (flatten-for-key expected-entity :db/id)
         (reduce (fn [[exp-act-bimap output] [expected-id-path expected-id]]
@@ -108,61 +111,98 @@
                                        (into {}))]
                         [exp-act-bimap (assoc-in output expected-id-path error)]))
                     [exp-act-bimap (assoc-in output expected-id-path (error :error.type/expected-id {:expected-id expected-id}))]))
-                [input-exp-act-bimap actual-entity]))))
+                [input-exp-act-bimap {}]))))
 
-(defn make-all-entities-consistent [actual-entities expected-entities]
+(defn validate-transaction-equivalence [left-transction right-transaction]
   "Make all actual entity ids consistent with the expected entity ids."
-  (->> (map vector actual-entities expected-entities)
+  (->> (map vector left-transction right-transaction)
        (reduce (fn [[exp-act-id-bi-map output-coll] [actual expected]]
-                 (let [[new-exp-act-id-bi-map output] (make-entity-consistent actual expected exp-act-id-bi-map)]
+                 (let [[new-exp-act-id-bi-map output] (validate-entity-equivalence actual expected exp-act-id-bi-map)]
                    [new-exp-act-id-bi-map (conj output-coll output)])) [(bimap-create-empty) []])
        (second)))
 
 
 (require '[clojure.test :refer :all])
 
-(defn test-consistent [expected actual]
-  (let [actual-made-consistent (make-all-entities-consistent actual expected)]
-    (is (= expected actual-made-consistent))))
+
+
+(defn test-validate-transaction-equivalence [desc expected actual expected-output]
+  (let [actual-made-consistent (validate-transaction-equivalence actual expected)]
+    (is (= expected-output actual-made-consistent) desc)))
+
 
 (require '[datomic.api :as d])
 
-;;should work fine
-
 
 (deftest test-examples
-  (test-consistent [{:db/id (d/tempid :db.part/user -1)}
-                    {:db/id (d/tempid :db.part/user -1)}]
+  (test-validate-transaction-equivalence "Should work fine"
+                                         [{:db/id (d/tempid :db.part/user -1)}
+                                          {:db/id (d/tempid :db.part/user -1)}]
 
-                   [{:db/id (d/tempid :db.part/user -2)}
-                    {:db/id (d/tempid :db.part/user -2)}])
+                                         [{:db/id (d/tempid :db.part/user -2)}
+                                          {:db/id (d/tempid :db.part/user -2)}]
 
-  (test-consistent [(d/tempid :db.part/user -1)] [{}])
+                                         [{:db/id (d/tempid :db.part/user -1)}
+                                          {:db/id (d/tempid :db.part/user -1)}])
 
-  ;; Inconsistent partition
-  (test-consistent [{:db/id (d/tempid :db.part/user -1)}
-                    {:db/id (d/tempid :db.part/custom -1)}]
+  (test-validate-transaction-equivalence "Missing Id"
+                                         [{:db/id (d/tempid :db.part/user -1)}]
+                                         [{}]
 
-                   [{:db/id (d/tempid :db.part/user -2)}
-                    {:db/id (d/tempid :db.part/user -2)}])
+                                         [{:db/id {:error/type :error.type/expected-id,
+                                                   :error/data {:expected-id (d/tempid :db.part/user -1)}}}])
 
-  ;; Inconsitent Ids
-  (test-consistent [{:db/id (d/tempid :db.part/user -1)}
-                    {:db/id (d/tempid :db.part/user -3)}]
+  (test-validate-transaction-equivalence "Inconsistent partition"
 
-                   [{:db/id (d/tempid :db.part/user -2)}
-                    {:db/id (d/tempid :db.part/user -2)}])
+                                         [{:db/id (d/tempid :db.part/user -1)}
+                                          {:db/id (d/tempid :db.part/custom -1)}]
 
-  ;; Inconsitent Ids
-  (test-consistent [{:db/id (d/tempid :db.part/user -1)}
-                    {:db/id (d/tempid :db.part/user -1)}]
+                                         [{:db/id (d/tempid :db.part/user -2)}
+                                          {:db/id (d/tempid :db.part/user -2)}]
 
-                   [{:db/id (d/tempid :db.part/user -4)}
-                    {:db/id (d/tempid :db.part/user -2)}])
+                                         [{:db/id (d/tempid :db.part/user -1)}
+                                          {:db/id {:error/data {:actual-id     (d/tempid :db.part/user -2)
+                                                                :expected-id   (d/tempid :db.part/custom -1)
+                                                                :mapped-exp-id (d/tempid :db.part/user -1)}
+                                                   :error/type :error.type/inconsisten-ids}}])
 
-  ;; Inconsitent Ids
-  (test-consistent [{:db/id :something}]
-                   [{:db/id :something2}]))
+
+  (test-validate-transaction-equivalence "Expected ids different, actual the same"
+                                         [{:db/id (d/tempid :db.part/user -1)}
+                                          {:db/id (d/tempid :db.part/user -3)}]
+
+                                         [{:db/id (d/tempid :db.part/user -2)}
+                                          {:db/id (d/tempid :db.part/user -2)}]
+
+                                         [{:db/id (d/tempid :db.part/user -1)}
+                                          {:db/id {:error/data {:actual-id     (d/tempid :db.part/user -2)
+                                                                :expected-id   (d/tempid :db.part/user -3)
+                                                                :mapped-exp-id (d/tempid :db.part/user -1)}
+                                                   :error/type :error.type/inconsisten-ids}}])
+
+
+  (test-validate-transaction-equivalence "Expected ids the same, actual different"
+                                         [{:db/id (d/tempid :db.part/user -1)}
+                                          {:db/id (d/tempid :db.part/user -1)}]
+
+                                         [{:db/id (d/tempid :db.part/user -4)}
+                                          {:db/id (d/tempid :db.part/user -2)}]
+
+                                         [{:db/id (d/tempid :db.part/user -1)}
+                                          {:db/id {:error/data {:actual-id     (d/tempid :db.part/user -2)
+                                                                :expected-id   (d/tempid :db.part/user -1)
+                                                                :mapped-act-id (d/tempid :db.part/user -4)}
+                                                   :error/type :error.type/inconsisten-ids}}])
+
+
+  (test-validate-transaction-equivalence "Different transacted ids"
+
+                                         [{:db/id :something}]
+                                         [{:db/id :something2}]
+
+                                         [{:db/id {:error/data {:actual-id   :something2
+                                                                :expected-id :something}
+                                                   :error/type :error.type/inconsisten-ids}}]))
 
 
 
