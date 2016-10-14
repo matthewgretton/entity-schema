@@ -136,7 +136,7 @@
 ;;TODO change code so that it actually builds up the final map from {}. Also, does this actually mean we don't need to
 ;;TODO in the main code actually recurse, could we just flatten the map, and then go from there.
 (deftest test-examples
-  (test-validate-transaction-equivalence "Should work fine"
+  (test-validate-transaction-equivalence "Simple equivalent transactions"
                                          [{:db/id (d/tempid :db.part/user -1)}
                                           {:db/id (d/tempid :db.part/user -1)}]
 
@@ -146,6 +146,26 @@
                                          [{:db/id (d/tempid :db.part/user -1)}
                                           {:db/id (d/tempid :db.part/user -1)}])
 
+  (test-validate-transaction-equivalence "Nested equivalent transactions"
+                                         [{:db/id (d/tempid :db.part/user -1)
+                                           :entity/ref {:db/id (d/tempid :db.part/user -2)}}]
+
+                                         [{:db/id (d/tempid :db.part/user -3)
+                                           :entity/ref {:db/id (d/tempid :db.part/user -4)}}]
+
+                                         [{:db/id (d/tempid :db.part/user -1)
+                                           :entity/ref {:db/id (d/tempid :db.part/user -2)}}])
+
+  (test-validate-transaction-equivalence "Nested equivalent transactions with same ref"
+                                         [{:db/id (d/tempid :db.part/user -1)
+                                           :entity/ref {:db/id (d/tempid :db.part/user -2)}}]
+
+                                         [{:db/id (d/tempid :db.part/user -3)
+                                           :entity/ref {:db/id (d/tempid :db.part/user -2)}}]
+
+                                         [{:db/id (d/tempid :db.part/user -1)
+                                           :entity/ref {:db/id (d/tempid :db.part/user -2)}}])
+
   (test-validate-transaction-equivalence "Missing Id"
                                          [{:db/id (d/tempid :db.part/user -1)}]
                                          [{}]
@@ -153,7 +173,7 @@
                                          [{:db/id {:error/type :error.type/expected-id,
                                                    :error/data {:expected-id (d/tempid :db.part/user -1)}}}])
 
-  (test-validate-transaction-equivalence "Inconsistent partition"
+  (test-validate-transaction-equivalence "Expected and actual have inconsistent partitions"
 
                                          [{:db/id (d/tempid :db.part/user -1)}
                                           {:db/id (d/tempid :db.part/custom -1)}]
