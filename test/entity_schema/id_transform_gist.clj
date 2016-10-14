@@ -133,7 +133,8 @@
 
 (require '[datomic.api :as d])
 
-
+;;TODO change code so that it actually builds up the final map from {}. Also, does this actually mean we don't need to
+;;TODO in the main code actually recurse, could we just flatten the map, and then go from there.
 (deftest test-examples
   (test-validate-transaction-equivalence "Should work fine"
                                          [{:db/id (d/tempid :db.part/user -1)}
