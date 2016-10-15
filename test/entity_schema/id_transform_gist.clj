@@ -158,7 +158,7 @@
 (require '[datomic.api :as d])
 
 (deftest making-ids-consistent-tests
-  (test-make-ids-consistent "Simple equivalent transactions"
+  (test-make-ids-consistent "Ids are equivalent"
 
                             [{:db/id (d/tempid :db.part/user -2)}
                              {:db/id (d/tempid :db.part/user -2)}]
@@ -170,7 +170,7 @@
                             [{:db/id (d/tempid :db.part/user -1)}
                              {:db/id (d/tempid :db.part/user -1)}])
 
-  (test-make-ids-consistent "Nested equivalent transactions"
+  (test-make-ids-consistent "Nested Ids are equivalent"
 
                             [{:db/id      (d/tempid :db.part/user -3)
                               :entity/ref {:db/id (d/tempid :db.part/user -4)}}]
@@ -183,7 +183,7 @@
                             [{:db/id      (d/tempid :db.part/user -1)
                               :entity/ref {:db/id (d/tempid :db.part/user -2)}}])
 
-  (test-make-ids-consistent "Nested equivalent transactions with same ref"
+  (test-make-ids-consistent "Nested equivalent ids with same ref"
                             [{:db/id      (d/tempid :db.part/user -3)
                               :entity/ref {:db/id (d/tempid :db.part/user -2)}}]
 
@@ -193,7 +193,7 @@
                             [{:db/id      (d/tempid :db.part/user -1)
                               :entity/ref {:db/id (d/tempid :db.part/user -2)}}])
 
-  (test-make-ids-consistent "Nested equivalent transactions with same ref"
+  (test-make-ids-consistent "Nested equivalent transactions with transacted id"
                             [{:db/id      (d/tempid :db.part/user -3)
                               :entity/ref {:db/id :some-ident}}]
 
@@ -260,14 +260,18 @@
 
                             [{:db/id :something}]
 
-                            [{:db/id {:error/data {:actual-id   :something2
-                                                   :expected-id :something}
-                                      :error/type :error.type/inconsisten-ids}}]))
+                            [{:db/id {:error/type :error.type/inconsisten-ids
+                                      :error/data {:actual-id   :something2
+                                                   :expected-id :something}}}]))
+
+
+
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Using the above code, we now have a way of testing the equivalence of transactions.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 
 (defn test-transactions-equivalent [actual-transaction expected-transaction]
   (let [consistent-actual-transaction (make-ids-consistent actual-transaction expected-transaction)]
