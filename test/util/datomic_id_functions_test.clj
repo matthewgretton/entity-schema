@@ -10,6 +10,28 @@
     [expected-output actual-made-consistent desc]))
 
 (deftest making-ids-consistent-tests
+
+  (->> (create-comparable-output "If Id is errored then ignore"
+
+                                 [{:db/id
+                                   {:error/type :error.type/missing-natrual-key,
+                                    :error/message "Missing natural key",
+                                    :error/data
+                                    {:error/natural-key [:test-entity/string-field], :error/entity {}}}}()]
+                                 [{:db/id
+                                   {:error/message "Missing natural key",
+                                    :error/type :error.type/missing-natrual-key,
+                                    :error/data
+                                                   {:error/entity {}, :error/natural-key [:test-entity/string-field]}}}]
+
+                                 [{:db/id
+                                   {:error/message "Missing natural key",
+                                    :error/type :error.type/missing-natrual-key,
+                                    :error/data
+                                                   {:error/entity {}, :error/natural-key [:test-entity/string-field]}}}]
+                                 )
+       ((fn [[exp act desc]] (is (= exp act) desc)))
+       )
   (->> (create-comparable-output "Ids are equivalent"
 
                                  [{:db/id (d/tempid :db.part/user -2)}

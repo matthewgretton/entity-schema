@@ -33,7 +33,8 @@
                    {:entity.schema/sub-type [:db/ident]}
                    {:entity.schema/fields [{:field/schema [:db/ident
                                                            {:db/cardinality [:db/ident]}
-                                                           {:db/valueType [:db/ident]}]}
+                                                           {:db/valueType [:db/ident]}]
+                                            :field/validation-function [:db/fn :db/ident]}
                                            {:field/entity-schema-type [:db/ident]
                                             :field/entity-schema      [:db/ident]}
                                            :field/nullable?]}

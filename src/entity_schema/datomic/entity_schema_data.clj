@@ -65,6 +65,12 @@
 
    {:db/id                 (d/tempid :db.part/db)
     :db.install/_attribute :db.part/db
+    :db/ident              :field/validation-function
+    :db/valueType          :db.type/ref
+    :db/cardinality        :db.cardinality/one}
+
+   {:db/id                 (d/tempid :db.part/db)
+    :db.install/_attribute :db.part/db
     :db/ident              :entity.schema/fields
     :db/valueType          :db.type/ref
     :db/cardinality        :db.cardinality/many}

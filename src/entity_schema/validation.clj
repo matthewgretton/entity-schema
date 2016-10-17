@@ -98,9 +98,10 @@
             :else [(unrecognised-cardinality-error cardinality) true]))))
 
 (defn validate-function [field value]
-  (if-let [f (get-in field [:field/validation-function :db/fn])]
-    (if-let [errored? (f value)]
-      [(error :error.type/validation-function "" {:func f}) errored?]
+  (if-let [f  (get-in field [:field/validation-function :db/fn])]
+    (if-let [errored? (not (f value))]
+      [(error :error.type/validation-function "Validation Function has failed" {:validation-func (dissoc f :fnref)
+                                                                                :value value}) errored?]
       [value false])
     [value false]))
 

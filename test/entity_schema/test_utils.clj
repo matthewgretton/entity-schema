@@ -6,10 +6,19 @@
             [entity-schema.datomic.entity-schema :as es]
             [entity-schema.processor :as p]
             [clojure.test :refer :all]
-            [util.datomic_id_function :as id-func]))
+            [util.datomic_id_function :as id-func]
+            [entity-schema.util.core :as core]
+            [entity-schema.validation :as v]))
 
 
 (require '[spyscope.core])
+
+
+(defn get-errored-id-paths [expected-entity]
+  (->> (core/flatten-for-key expected-entity :db/id)
+       (filter (comp v/error? second))
+       (map first)))
+
 
 (defn create-comparable-output
   ([desc fields schema command-data input-entities [expected-pairs expected-errored?] data-transactions]
@@ -27,26 +36,79 @@
            (let [actual-entities (map first actual-pairs)
                  expected-entities (map first expected-pairs)
                  actual-errors (map second actual-pairs)
-                 transformed-actual-entities  (id-func/make-ids-consistent actual-entities expected-entities)
-                 transformed-actual-pairs (->> (map vector transformed-actual-entities actual-errors) (into []))]
-             [[expected-pairs expected-errored?] [transformed-actual-pairs actual-errored?]  desc]))))))
+                 ;;TODO here we need to remove the errored ids
+                 expected-errored-ids (into #{} (map get-errored-id-paths expected-entities))
+                 expected-pairs (->> expected-entities
+                                     (map (fn [ent]
+                                            (reduce (fn [[[inc-ent exc-ent] ks]]
+                                                      [(assoc-in inc-ent ks (get-in ent ks))
+                                                       (core/dissoc-in exc-ent ks)]
+                                                      [{} ent]) expected-errored-ids))))
+
+                 expected-dissoced-entities (map first expected-pairs)
+
+                 act-pairs (->> actual-entities
+                                (map (fn [ent]
+                                       (reduce (fn [[[inc-ent exc-ent] ks]]
+                                                 [(assoc-in inc-ent ks (get-in ent ks))
+                                                  (core/dissoc-in exc-ent ks)]
+                                                 [{} ent]) expected-errored-ids))))
+
+                 act-dissoced-entities (map first act-pairs)
+                 act-missing-entities (map second act-pairs)
+
+
+                 transformed-actual-entities (id-func/make-ids-consistent act-dissoced-entities
+                                                                          expected-dissoced-entities)
+
+                 merged-actual-entities (->> (map vector act-missing-entities transformed-actual-entities)
+                                             (map (fn [[mis act]]
+                                                    (->> (core/flatten-for-key mis :db/id)
+                                                         (reduce (fn [res [ks v]]
+                                                                   (assoc-in res ks v))
+                                                                 act))))
+                                             (into []))
+
+
+
+                 transformed-actual-pairs (->> (map vector merged-actual-entities actual-errors) (into []))]
+             [[expected-pairs expected-errored?] [transformed-actual-pairs actual-errored?] desc]))))))
   ([desc fields schema command-data input-entities [expected-pairs expected-errored?]]
    (create-comparable-output desc fields schema command-data input-entities [expected-pairs expected-errored?] [])))
-
 
 
 ;;test method
 (defn create-comparable-valid-single-entity-output
   ([desc fields schema command-data input-entity expected-ouput data]
-   (create-comparable-output desc fields schema command-data [input-entity] [[[expected-ouput false]] false]) data)
+   (create-comparable-output desc fields schema command-data [input-entity] [[[expected-ouput false]] false] data))
 
   ([desc fields schema command-data input-entity expected-ouput]
    (create-comparable-valid-single-entity-output desc fields schema command-data input-entity expected-ouput [])))
 
 (defn create-comparable-invalid-single-entity-output
   ([desc fields schema command-data input-entity expected-ouput data]
-   (create-comparable-output desc fields schema command-data [input-entity] [[[expected-ouput true]] true]) data)
+   (create-comparable-output desc fields schema command-data [input-entity] [[[expected-ouput true]] true] data))
 
   ([desc fields schema command-data input-entity expected-ouput]
    (create-comparable-invalid-single-entity-output desc fields schema command-data input-entity expected-ouput [])))
 
+(create-comparable-invalid-single-entity-output
+  "Test"
+  [{:db/ident       :test-entity/string-field,
+    :db/valueType   :db.type/string,
+    :db/cardinality :db.cardinality/one,
+    :db/unique      :db.unique/identity}]
+
+  {:db/ident                  :entity.schema/test,
+   :entity.schema/part        :db.part/entity-schema,
+   :entity.schema/fields
+                              [{:field/nullable? false, :field/schema :test-entity/string-field}],
+   :entity.schema/natural-key [:test-entity/string-field]}
+
+  {:command-map     {:entity.schema/test :command/insert},
+   :default-command :command/look-up}
+
+  {}
+  {:test-entity/string-field
+   {:error/message "Required Field",
+    :error/type    :error.type/required-field}})

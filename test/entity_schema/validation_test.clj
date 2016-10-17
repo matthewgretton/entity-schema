@@ -43,7 +43,7 @@
           :entity.schema/natural-key [:test-entity/string-field]}
 
          insert-but-look-up-by-defualt-command-map
-         
+
          [{:test-entity/string-field "Bob12"}
           {:test-entity/string-field "Bob12"}]
 
@@ -79,9 +79,9 @@
          [card-one-unique-string-field]
          schema-with-required-unqiue-field
          insert-but-look-up-by-defualt-command-map
-         
+
          {:test-entity/string-field 12}
-         
+
          {:test-entity/string-field
           {:error/data    {:datomic-type :db.type/string
                            :valid-types  #{java.lang.String}
@@ -101,21 +101,71 @@
                                      :error/type    :error.type/required-field}})
        ((fn [[exp act desc]] (is (= exp act) desc))))
 
-  ;(test-single-entity "Function test"
-  ;                    [string-field] simple-schema-optional-field insert-command-map
-  ;                    {}
-  ;                    {:test-entity/string-field {:error/message "Required Field"
-  ;                                                :error/type    :error.type/required-field}})
+
+
+
+  (->> (test/create-comparable-invalid-single-entity-output
+         "Invalid Function Test"
+         [card-one-unique-string-field]
+         {:db/ident                  :entity.schema/test
+          :entity.schema/part        :db.part/entity-schema
+          :entity.schema/fields      [{:field/nullable?           true
+                                       :field/schema              :test-entity/string-field
+                                       :field/validation-function {:db/ident :some-func
+                                                                   :db/fn    (d/function {:lang   :clojure
+                                                                                          :params '[value]
+                                                                                          :code   '(<= (count value) 5)})}}]
+          :entity.schema/natural-key [:test-entity/string-field]}
+         insert-but-look-up-by-defualt-command-map
+         {:test-entity/string-field "More Than 5 chars"}
+         {:test-entity/string-field {:error/data    {:validation-func (dissoc (d/function {:lang   :clojure,
+                                                                                           :params '[value],
+                                                                                           :code   '(<= (count value) 5)}) :fnref)
+                                                     :value           "More Than 5 chars"}
+                                     :error/message "Validation Function has failed"
+                                     :error/type    :error.type/validation-function}})
+       ((fn [[exp act desc]] (is (= exp act) desc))))
+
+
+
+
+
+
+
+  (= (d/function {:code   "(<= (count value) 5)"
+                  :lang   :clojure
+                  :params '[value]})
+     (d/function {:code   "(<= (count value) 5)"
+                  :lang   :clojure
+                  :params '[value]}))
+
+  (->> (test/create-comparable-valid-single-entity-output
+         "Valid Function Test"
+         [card-one-unique-string-field]
+         {:db/ident                  :entity.schema/test
+          :entity.schema/part        :db.part/entity-schema
+          :entity.schema/fields      [{:field/nullable?           true
+                                       :field/schema              :test-entity/string-field
+                                       :field/validation-function {:db/ident :some-func
+                                                                   :db/fn    (d/function {:lang   :clojure
+                                                                                          :params '[value]
+                                                                                          :code   '(<= (count value) 5)})}}]
+          :entity.schema/natural-key [:test-entity/string-field]}
+         insert-but-look-up-by-defualt-command-map
+         {:test-entity/string-field "<5"}
+         {:db/id (d/tempid :db.part/entity-schema) :test-entity/string-field "<5"})
+       ((fn [[exp act desc]] (is (= exp act) desc))))
 
   ;; What do we need to happen here?
   (->> (test/create-comparable-invalid-single-entity-output
          "Missing (optional) natural key"
-         [card-one-unique-string-field] schema-with-optional-unqiue-field insert-but-look-up-by-defualt-command-map
-                                                     {}
-                                                     {:db/id {:error/message "Missing natural key"
-                                                              :error/type    :error.type/missing-natrual-key
-                                                              :error/data    {:error/entity      {}
-                                                                              :error/natural-key [:test-entity/string-field]}}})
+         [card-one-unique-string-field] schema-with-optional-unqiue-field
+         insert-but-look-up-by-defualt-command-map
+         {}
+         {:db/id {:error/message "Missing natural key"
+                  :error/type    :error.type/missing-natrual-key
+                  :error/data    {:error/entity      {}
+                                  :error/natural-key [:test-entity/string-field]}}})
        ((fn [[exp act desc]] (is (= exp act) desc))))
 
   (->> (test/create-comparable-invalid-single-entity-output
