@@ -36,26 +36,34 @@
            (let [actual-entities (map first actual-pairs)
                  expected-entities (map first expected-pairs)
                  actual-errors (map second actual-pairs)
-                 ;;TODO here we need to remove the errored ids
-                 expected-errored-ids (into #{} (map get-errored-id-paths expected-entities))
-                 expected-pairs (->> expected-entities
-                                     (map (fn [ent]
-                                            (reduce (fn [[[inc-ent exc-ent] ks]]
-                                                      [(assoc-in inc-ent ks (get-in ent ks))
-                                                       (core/dissoc-in exc-ent ks)]
-                                                      [{} ent]) expected-errored-ids))))
 
-                 expected-dissoced-entities (map first expected-pairs)
+                 expected-per-ent-errored-ids (into [] (map get-errored-id-paths expected-entities))
 
-                 act-pairs (->> actual-entities
-                                (map (fn [ent]
-                                       (reduce (fn [[[inc-ent exc-ent] ks]]
-                                                 [(assoc-in inc-ent ks (get-in ent ks))
-                                                  (core/dissoc-in exc-ent ks)]
-                                                 [{} ent]) expected-errored-ids))))
+                 expected-dis-pairs (->> (map vector expected-entities expected-per-ent-errored-ids)
+                                         (map (fn [[ent e-ids]]
+                                                (reduce (fn [[inc-ent exc-ent] ks]
+                                                          (if (empty? ks)
+                                                            [inc-ent exc-ent]
+                                                            [(assoc-in inc-ent ks (get-in ent ks))
+                                                             (core/dissoc-in exc-ent ks)]
+                                                            ))
+                                                        [{} ent] e-ids))))
 
-                 act-dissoced-entities (map first act-pairs)
-                 act-missing-entities (map second act-pairs)
+                 expected-dissoced-entities (map second expected-dis-pairs)
+
+                 act-per-ent-errored-ids (into [] (map get-errored-id-paths  actual-entities))
+
+                 act-dis-pairs   (->> (map vector actual-entities act-per-ent-errored-ids)
+                                    (map (fn [[ent e-ids]]
+                                           (reduce (fn [[inc-ent exc-ent] ks]
+                                                     (if (empty? ks)
+                                                       [inc-ent exc-ent]
+                                                       [(assoc-in inc-ent ks (get-in ent ks))
+                                                        (core/dissoc-in exc-ent ks)]
+                                                       )) [{} ent] e-ids))))
+
+                 act-dissoced-entities (map second act-dis-pairs)
+                 act-missing-entities (map first act-dis-pairs)
 
 
                  transformed-actual-entities (id-func/make-ids-consistent act-dissoced-entities
@@ -63,10 +71,12 @@
 
                  merged-actual-entities (->> (map vector act-missing-entities transformed-actual-entities)
                                              (map (fn [[mis act]]
-                                                    (->> (core/flatten-for-key mis :db/id)
-                                                         (reduce (fn [res [ks v]]
-                                                                   (assoc-in res ks v))
-                                                                 act))))
+                                                    (if (empty? mis)
+                                                      act
+                                                      (->> (core/flatten-keys mis)
+                                                           (reduce (fn [res [ks v]]
+                                                                     (assoc-in res ks v))
+                                                                   act)))))
                                              (into []))
 
 
@@ -92,23 +102,27 @@
   ([desc fields schema command-data input-entity expected-ouput]
    (create-comparable-invalid-single-entity-output desc fields schema command-data input-entity expected-ouput [])))
 
-(create-comparable-invalid-single-entity-output
-  "Test"
-  [{:db/ident       :test-entity/string-field,
-    :db/valueType   :db.type/string,
+(create-comparable-output
+  "Valid Test"
+  [{:db/ident :test-entity/string-field,
+    :db/valueType :db.type/string,
     :db/cardinality :db.cardinality/one,
-    :db/unique      :db.unique/identity}]
-
-  {:db/ident                  :entity.schema/test,
-   :entity.schema/part        :db.part/entity-schema,
+    :db/unique :db.unique/identity}]
+  {:db/ident :entity.schema/test,
+   :entity.schema/part :db.part/entity-schema,
    :entity.schema/fields
-                              [{:field/nullable? false, :field/schema :test-entity/string-field}],
+   [{:field/nullable? true, :field/schema :test-entity/string-field}],
    :entity.schema/natural-key [:test-entity/string-field]}
-
-  {:command-map     {:entity.schema/test :command/insert},
+  {:command-map {:entity.schema/test :command/insert},
    :default-command :command/look-up}
+  [{:test-entity/string-field "Bob12"}
+   {:test-entity/string-field "Bob12"}]
+  [[[{:test-entity/string-field "Bob12",
+      :db/id {:part :db.part/entity-schema, :idx -1}}
+     false]
+    [{:test-entity/string-field "Bob12",
+      :db/id {:part :db.part/entity-schema, :idx -1}}
+     false]]
+   false]
+  [])
 
-  {}
-  {:test-entity/string-field
-   {:error/message "Required Field",
-    :error/type    :error.type/required-field}})
