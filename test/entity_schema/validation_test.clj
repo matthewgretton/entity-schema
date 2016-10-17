@@ -2,7 +2,9 @@
   (:require [clojure.test :refer :all]
             [datomic.api :as d]
             [entity-schema.processor :as p]
-            [entity-schema.test-helper :as test]))
+            [entity-schema.test-utils :as test]))
+
+
 
 (def card-one-unique-string-field
   {:db/ident       :test-entity/string-field
@@ -30,60 +32,74 @@
 
 
 (deftest multiple-entity-validation-tests
-  (test/test-entities "Valid"
-                                   [{:db/ident       :test-entity/string-field
-                        :db/valueType   :db.type/string
-                        :db/cardinality :db.cardinality/one
-                        :db/unique      :db.unique/identity}]
+  (->> (test/create-comparable-output
+         "Valid Test"
+         [card-one-unique-string-field]
 
-                                   {:db/ident                  :entity.schema/test
-                       :entity.schema/part        :db.part/entity-schema
-                       :entity.schema/fields      [{:field/nullable? true
-                                                    :field/schema    :test-entity/string-field}]
-                       :entity.schema/natural-key [:test-entity/string-field]}
+         {:db/ident                  :entity.schema/test
+          :entity.schema/part        :db.part/entity-schema
+          :entity.schema/fields      [{:field/nullable? true
+                                       :field/schema    :test-entity/string-field}]
+          :entity.schema/natural-key [:test-entity/string-field]}
 
-                                   insert-but-look-up-by-defualt-command-map
-                                   [{:test-entity/string-field "Bob12"}
-                       {:test-entity/string-field "Bob12"}]
+         insert-but-look-up-by-defualt-command-map
+         
+         [{:test-entity/string-field "Bob12"}
+          {:test-entity/string-field "Bob12"}]
 
-                                   [[[{:test-entity/string-field "Bob12"
-                          :db/id                    (d/tempid :db.part/entity-schema -1)} false]
-                        [{:test-entity/string-field "Bob12"
-                          :db/id                    (d/tempid :db.part/entity-schema -1)} false]
-                        ] false])
+         [[[{:test-entity/string-field "Bob12"
+             :db/id                    (d/tempid :db.part/entity-schema -1)} false]
+           [{:test-entity/string-field "Bob12"
+             :db/id                    (d/tempid :db.part/entity-schema -1)} false]
+           ] false])
+       ((fn [[exp act desc]] (is (= exp act) desc))))
 
-  (test/test-entities "Valid"
-                                   [card-one-unique-string-field] schema-with-required-unqiue-field insert-but-look-up-by-defualt-command-map
-                                   [{:test-entity/string-field "Bob12"}]
-                                   [[[{:test-entity/string-field "Bob12"
-                          :db/id                    (d/tempid :db.part/entity-schema)} false]] false]))
-
-
-
+  (->> (test/create-comparable-output
+         "Valid"
+         [card-one-unique-string-field] schema-with-required-unqiue-field
+         insert-but-look-up-by-defualt-command-map
+         [{:test-entity/string-field "Bob12"}]
+         [[[{:test-entity/string-field "Bob12"
+             :db/id                    (d/tempid :db.part/entity-schema)} false]] false])
+       ((fn [[exp act desc]] (is (= exp act) desc)))))
 
 (deftest single-entity-validation-tests
 
-  (test/test-valid-single-entity "Valid"
-                                 [card-one-unique-string-field] schema-with-required-unqiue-field insert-but-look-up-by-defualt-command-map
-                                 {:test-entity/string-field "Bob12"}
-                                 {:db/id                    (d/tempid :db.part/entity-schema)
-                                  :test-entity/string-field "Bob12"})
+  (->> (test/create-comparable-valid-single-entity-output
+         "Valid"
+         [card-one-unique-string-field] schema-with-required-unqiue-field
+         insert-but-look-up-by-defualt-command-map
+         {:test-entity/string-field "Bob12"}
+         {:db/id                    (d/tempid :db.part/entity-schema)
+          :test-entity/string-field "Bob12"})
+       ((fn [[exp act desc]] (is (= exp act) desc))))
 
-  (test/test-invalid-single-entity "Incorrect field type"
-                                   [card-one-unique-string-field] schema-with-required-unqiue-field insert-but-look-up-by-defualt-command-map
-                                   {:test-entity/string-field 12}
-                                   {:test-entity/string-field {:error/data    {:datomic-type :db.type/string
-                                                                               :valid-types  #{java.lang.String}
-                                                                               :value        12
-                                                                               :value-type   java.lang.Long}
-                                                               :error/message "Incorrect Value Type"
-                                                               :error/type    :error.type/incorrect-type}})
+  (->> (test/create-comparable-invalid-single-entity-output
+         "Incorrect field type"
+         [card-one-unique-string-field]
+         schema-with-required-unqiue-field
+         insert-but-look-up-by-defualt-command-map
+         
+         {:test-entity/string-field 12}
+         
+         {:test-entity/string-field
+          {:error/data    {:datomic-type :db.type/string
+                           :valid-types  #{java.lang.String}
+                           :value        12
+                           :value-type   java.lang.Long}
+           :error/message "Incorrect Value Type"
+           :error/type    :error.type/incorrect-type}})
+       ((fn [[exp act desc]] (is (= exp act) desc))))
 
-  (test/test-invalid-single-entity "Missing required field"
-                                   [card-one-unique-string-field] schema-with-required-unqiue-field insert-but-look-up-by-defualt-command-map
-                                   {}
-                                   {:test-entity/string-field {:error/message "Required Field"
-                                                               :error/type    :error.type/required-field}})
+  (->> (test/create-comparable-invalid-single-entity-output
+         "Missing required field"
+         [card-one-unique-string-field]
+         schema-with-required-unqiue-field
+         insert-but-look-up-by-defualt-command-map
+         {}
+         {:test-entity/string-field {:error/message "Required Field"
+                                     :error/type    :error.type/required-field}})
+       ((fn [[exp act desc]] (is (= exp act) desc))))
 
   ;(test-single-entity "Function test"
   ;                    [string-field] simple-schema-optional-field insert-command-map
@@ -92,39 +108,47 @@
   ;                                                :error/type    :error.type/required-field}})
 
   ;; What do we need to happen here?
-  (test/test-invalid-single-entity "Missing (optional) natural key"
-                                   [card-one-unique-string-field] schema-with-optional-unqiue-field insert-but-look-up-by-defualt-command-map
-                                   {}
-                                   {:db/id {:error/message "Missing natural key"
-                                            :error/type    :error.type/missing-natrual-key
-                                            :error/data    {:error/entity      {}
-                                                            :error/natural-key [:test-entity/string-field]}}})
+  (->> (test/create-comparable-invalid-single-entity-output
+         "Missing (optional) natural key"
+         [card-one-unique-string-field] schema-with-optional-unqiue-field insert-but-look-up-by-defualt-command-map
+                                                     {}
+                                                     {:db/id {:error/message "Missing natural key"
+                                                              :error/type    :error.type/missing-natrual-key
+                                                              :error/data    {:error/entity      {}
+                                                                              :error/natural-key [:test-entity/string-field]}}})
+       ((fn [[exp act desc]] (is (= exp act) desc))))
 
-  (test/test-invalid-single-entity "Cardinality Test"
-                                   [card-one-unique-string-field] {:db/ident                  :entity.schema/test
-                                                                   :entity.schema/part        :db.part/entity-schema
-                                                                   :entity.schema/fields      [{:field/nullable? true
-                                                                                                :field/schema    :test-entity/string-field}]
-                                                                   :entity.schema/natural-key [:test-entity/string-field]} insert-but-look-up-by-defualt-command-map
-                                   {:test-entity/string-field ["Bob" "Ted"]}
-                                   {:test-entity/string-field {:error/data    {:value ["Bob"
-                                                                                       "Ted"]}
-                                                               :error/message "Value associated with cardinality one field should not be a collection"
-                                                               :error/type    :error.type/cardinality}})
+  (->> (test/create-comparable-invalid-single-entity-output
+         "Cardinality Test"
+         [card-one-unique-string-field]
+         {:db/ident                  :entity.schema/test
+          :entity.schema/part        :db.part/entity-schema
+          :entity.schema/fields      [{:field/nullable? true
+                                       :field/schema    :test-entity/string-field}]
+          :entity.schema/natural-key [:test-entity/string-field]}
+         insert-but-look-up-by-defualt-command-map
+         {:test-entity/string-field ["Bob" "Ted"]}
+         {:test-entity/string-field {:error/data    {:value ["Bob"
+                                                             "Ted"]}
+                                     :error/message "Value associated with cardinality one field should not be a collection"
+                                     :error/type    :error.type/cardinality}})
+       ((fn [[exp act desc]] (is (= exp act) desc))))
 
-  (test/test-valid-single-entity "Single Value input for Cardinality many field should be fine"
-                                 [{:db/ident       :test-entity/string-field
-                                   :db/valueType   :db.type/string
-                                   :db/cardinality :db.cardinality/many
-                                   :db/unique      :db.unique/identity}]
-                                 {:db/ident                  :entity.schema/test
-                                  :entity.schema/part        :db.part/entity-schema
-                                  :entity.schema/fields      [{:field/nullable? true
-                                                               :field/schema    :test-entity/string-field}]
-                                  :entity.schema/natural-key [:test-entity/string-field]} insert-but-look-up-by-defualt-command-map
-                                 {:test-entity/string-field "Bob"}
-                                 {:db/id                    (d/tempid :db.part/entity-schema)
-                                  :test-entity/string-field #{"Bob"}})
+  (->> (test/create-comparable-valid-single-entity-output
+         "Single Value input for Cardinality many field should be fine"
+         [{:db/ident       :test-entity/string-field
+           :db/valueType   :db.type/string
+           :db/cardinality :db.cardinality/many
+           :db/unique      :db.unique/identity}]
+         {:db/ident                  :entity.schema/test
+          :entity.schema/part        :db.part/entity-schema
+          :entity.schema/fields      [{:field/nullable? true
+                                       :field/schema    :test-entity/string-field}]
+          :entity.schema/natural-key [:test-entity/string-field]} insert-but-look-up-by-defualt-command-map
+         {:test-entity/string-field "Bob"}
+         {:db/id                    (d/tempid :db.part/entity-schema)
+          :test-entity/string-field #{"Bob"}})
+       ((fn [[exp act desc]] (is (= exp act) desc))))
 
   ;(test-single-entity "Test expanding"
   ;                    [{:db/ident       :test-entity/ref-field

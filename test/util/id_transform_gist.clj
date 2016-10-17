@@ -1,4 +1,4 @@
-(ns entity-schema.id-transform-gist
+(ns util.id-transform-gist
   "Code to check the consistency of transaxion data output.
 
   It's difficult to test code that prouduces transaction data, as temporary ids are generated randomly. The code in
@@ -154,7 +154,6 @@
   (let [actual-made-consistent (make-ids-consistent actual expected)]
     (is (= expected-output actual-made-consistent) desc)))
 
-
 (require '[datomic.api :as d])
 
 (deftest making-ids-consistent-tests
@@ -286,7 +285,7 @@
                                  [{:db/id (d/tempid :db.part/user -2)}
                                   {:db/id (d/tempid :db.part/user -2)}])
 
- ;; Fails as actual transaction is inconsistent with expected tranasction
+  ;; Fails as actual transaction is inconsistent with expected tranasction
   (test-transactions-equivalent  [{:db/id (d/tempid :db.part/user -1)}
                                   {:db/id (d/tempid :db.part/user -1)}]
 
