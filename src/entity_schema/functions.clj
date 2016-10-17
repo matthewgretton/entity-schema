@@ -53,13 +53,13 @@
       (es/pull-entity-schema db schema-id))))
 
 
-(defn recursively-pull-schema [db schema-id entity]
+(defn recursively-pull-schema [db schema-id]
   (let [{:keys [:entity.schema/fields] :as schema} (es/pull-entity-schema db schema-id)]
     (let [resolved-fields (->> fields
                                (map (fn [f]
                                       (if (= :db.type/ref (get-in f [:field/schema :db/valueType :db/ident]))
-                                        (let [sub-schema-id (derive-schema-id db f entity)
-                                              sub-schema (recursively-pull-schema db sub-schema-id (get entity (get-in f [:field/schema :db/ident])))]
+                                        (let [sub-schema-id (get-in f [:field/entity-schema :db/ident])
+                                              sub-schema (recursively-pull-schema db sub-schema-id)]
                                           (assoc f :field/entity-schema sub-schema))
                                         f)))
                                (into #{}))]

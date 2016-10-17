@@ -8,7 +8,8 @@
             [clojure.test :refer :all]
             [util.datomic_id_function :as id-func]
             [entity-schema.util.core :as core]
-            [entity-schema.validation :as v]))
+            [entity-schema.validation :as v]
+            [entity-schema.functions :as f]))
 
 
 (require '[spyscope.core])
@@ -43,12 +44,15 @@
    (let [uri (dh/create-in-mem-db-uri "entity-db")
          conn (do (d/create-database uri) (d/connect uri))]
      @(d/transact conn (->> fields (map #(dh/create-field %)) (into [])))
-     @(d/transact conn data-transactions)
+      @(d/transact conn  data-transactions)
+
      (let [db (d/db conn)
-           datomic-compat-schema (schema-helper/make-compatible-with-datomic db schema)]
+           datomic-compat-schema (schema-helper/make-schema-stub-compatible-with-datomic db schema)]
        @(d/transact conn esd/all-fields)
        @(d/transact conn [datomic-compat-schema])
-       (let [pulled-schema (es/pull-entity-schema (d/db conn) (:db/ident datomic-compat-schema))]
+       (let [pulled-schema (f/recursively-pull-schema (d/db conn) (:db/ident datomic-compat-schema))
+           ;;(es/pull-entity-schema (d/db conn) (:db/ident datomic-compat-schema))
+           ]
          (let [[actual-pairs actual-errored?] (p/process-all-entities db pulled-schema command-data input-entities)]
            (d/delete-database uri)
            (let [actual-entities (map first actual-pairs)

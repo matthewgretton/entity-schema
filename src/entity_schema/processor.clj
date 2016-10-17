@@ -2,7 +2,8 @@
   (:require [clojure.core.reducers :as r]
             [entity-schema.datomic.entity-schema :as es]
             [entity-schema.validation :as v]
-            [entity-schema.functions :as u]))
+            [entity-schema.functions :as u]
+            [datomic.api :as d]))
 
 (defn assoc-if-not-nil [map key value]
   (if (nil? value) map (assoc map key value)))
@@ -12,7 +13,7 @@
   (contains? v/ref-identifier-types (class value)))
 
 (defn expand-ref [db unexpanded-ref]
-  (es/pull-entity-schema db unexpanded-ref))
+  (d/pull db '[*] unexpanded-ref))
 
 (defn merge-id-caches
   ([id-cache-0 id-cache-1]
@@ -27,6 +28,7 @@
 
 (defn get-id [db {:keys [:db/ident :entity.schema/part] :as schema} command-data entity id-cache]
   "return [entity-in-db? db-id id-cache errored?]"
+
   (let [natural-key-list (v/natural-key-coll schema [])
         natural-key-map (select-keys entity natural-key-list)
         [from-db? cached-id] (get-in id-cache [ident natural-key-map])]
@@ -47,12 +49,12 @@
 (declare process-entity)
 
 (defn process-ref-entity [db command-data field value id-cache entity-cache]
-  (let [[expanded-value expand-errored?] (if (ref-identifier-type? value)
-                                           (->> (expand-ref db value) (v/validate-expanded-ref field value))
+  (let [[expanded-value expand-errored?] (if (ref-identifier-type?   value)
+                                           (->>  (expand-ref db value) (v/validate-expanded-ref field value))
                                            [value false])]
     (if expand-errored?
       [value id-cache entity-cache false]
-      (process-entity db (:field/entity-schema field) command-data expanded-value id-cache entity-cache))))
+      (process-entity db (:field/entity-schema field) command-data #spy/p expanded-value id-cache entity-cache))))
 
 (defn process-valid-value [db command-data field value id-cache entity-cache]
   (if (u/ref-field? field)
@@ -120,7 +122,7 @@
      (if key-fields-errored?
        [key-field-entity key-field-id-cache key-field-entity-cache key-fields-errored?]
        (let [[entity-in-db? db-id upd-key-field-id-cache db-id-error?]
-             (get-id db schema command-data key-field-entity key-field-id-cache)
+             (get-id db  schema command-data key-field-entity key-field-id-cache)
              db-upd-key-field-entity (assoc key-field-entity :db/id db-id)]
          (if db-id-error?
            [db-upd-key-field-entity upd-key-field-id-cache key-field-entity-cache db-id-error?]
@@ -215,7 +217,7 @@
    (let [[es id-cache _ errored?]
          (r/fold combine-result
                  (fn [[es id-cache entity-cache current-errored?] entity]
-                   (let [[processed-entity updated-id-cache updated-entity-cache errored?] (process-entity db schema command-data entity id-cache entity-cache)]
+                   (let [[processed-entity updated-id-cache updated-entity-cache errored?] (process-entity db  schema command-data entity id-cache entity-cache)]
                      [(conj es [processed-entity errored?]) updated-id-cache updated-entity-cache (or current-errored? errored?)]))
                  entities)]
      [es errored?])))

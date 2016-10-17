@@ -4,8 +4,6 @@
             [entity-schema.processor :as p]
             [entity-schema.test-utils :as test]))
 
-
-
 (def card-one-unique-string-field
   {:db/ident       :test-entity/string-field
    :db/valueType   :db.type/string
@@ -118,26 +116,16 @@
           :entity.schema/natural-key [:test-entity/string-field]}
          insert-but-look-up-by-defualt-command-map
          {:test-entity/string-field "More Than 5 chars"}
-         {:test-entity/string-field {:error/data    {:validation-func (dissoc (d/function {:lang   :clojure,
-                                                                                           :params '[value],
-                                                                                           :code   '(<= (count value) 5)}) :fnref)
+         {:test-entity/string-field {:error/data    {:validation-func {:lang     :clojure
+                                                                       :imports  []
+                                                                       :requires []
+                                                                       :params   '[value]
+                                                                       :code     "(<= (count value) 5)"}
                                                      :value           "More Than 5 chars"}
                                      :error/message "Validation Function has failed"
                                      :error/type    :error.type/validation-function}})
        ((fn [[exp act desc]] (is (= exp act) desc))))
 
-
-
-
-
-
-
-  (= (d/function {:code   "(<= (count value) 5)"
-                  :lang   :clojure
-                  :params '[value]})
-     (d/function {:code   "(<= (count value) 5)"
-                  :lang   :clojure
-                  :params '[value]}))
 
   (->> (test/create-comparable-valid-single-entity-output
          "Valid Function Test"
@@ -200,21 +188,41 @@
           :test-entity/string-field #{"Bob"}})
        ((fn [[exp act desc]] (is (= exp act) desc))))
 
-  ;(test-single-entity "Test expanding"
-  ;                    [{:db/ident       :test-entity/ref-field
-  ;                      :db/valueType   :db.type/ref
-  ;                      :db/cardinality :db.cardinality/one
-  ;                      :db/unique      :db.unique/identity}]
-  ;                    {:db/ident                  :entity.schema/test
-  ;                     :entity.schema/part        :db.part/entity-schema
-  ;                     :entity.schema/fields      [{:field/nullable?     true
-  ;                                                  :field/schema        :test-entity/ref-field
-  ;                                                  :field/entity-schema {}}]
-  ;                     :entity.schema/natural-key [:test-entity/string-field]} insert-command-map
-  ;                    {:test-entity/string-field "Bob"}
-  ;                    {:test-entity/string-field #{"Bob"}})
+  (->> (test/create-comparable-valid-single-entity-output
 
-  )
+         "Test expanding"
+         [{:db/ident       :test-entity/ref-field
+           :db/valueType   :db.type/ref
+           :db/cardinality :db.cardinality/one
+           :db/unique      :db.unique/identity}
+          {:db/ident       :test-entity/string-field
+           :db/valueType   :db.type/string
+           :db/cardinality :db.cardinality/one
+           :db/unique      :db.unique/identity}]
+         {:db/ident                  :entity.schema/test
+          :entity.schema/part        :db.part/user
+          :entity.schema/fields      [{:field/nullable?     true
+                                       :field/schema        :test-entity/ref-field
+                                       :field/entity-schema {:db/ident                  :entity.schema/internal
+                                                             :entity.schema/part        :db.part/user
+                                                             :entity.schema/fields      [{:field/nullable? true
+                                                                                          :field/schema    :test-entity/string-field}]
+                                                             :entity.schema/natural-key [:test-entity/string-field]}}]
+          :entity.schema/natural-key [:test-entity/ref-field]}
+         insert-but-look-up-by-defualt-command-map
+
+         {:test-entity/ref-field :bob-entity}
+
+         {:db/id                 (d/tempid :db.part/user)
+          :test-entity/ref-field {:db/id                    (d/tempid :db.part/user)
+                                  :db/ident :bob-entity
+                                  :test-entity/string-field "Bob"}}
+
+
+         [{:db/id                    (d/tempid :db.part/user)
+           :db/ident                 :bob-entity
+           :test-entity/string-field "Bob"}])
+       ((fn [[exp act desc]] (is (= exp act) desc)))))
 
 
 (deftest test-combine

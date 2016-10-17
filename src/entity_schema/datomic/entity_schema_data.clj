@@ -103,8 +103,13 @@
    ]
   )
 
+(def partitions
+  [{:db/id (d/tempid :db.part/db),
+    :db/ident :db.part/entity-schema,
+    :db.install/_partition :db.part/db}])
+
 (def all-fields
-  (->> (concat linked-list-fields entity-schema-fields)
+  (->> (concat linked-list-fields entity-schema-fields partitions)
        (into [])))
 
 
