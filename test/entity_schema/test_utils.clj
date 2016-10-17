@@ -20,6 +20,24 @@
        (map first)))
 
 
+
+(defn errored-db-id-data [expected-entities]
+  (let [per-entity-errored-ids (into [] (map get-errored-id-paths expected-entities))
+
+        data-pairs (->> (map vector expected-entities per-entity-errored-ids)
+                                (map (fn [[ent e-ids]]
+                                       (reduce (fn [[inc-ent exc-ent] ks]
+                                                 (if (empty? ks)
+                                                   [inc-ent exc-ent]
+                                                   [(assoc-in inc-ent ks (get-in ent ks))
+                                                    (core/dissoc-in exc-ent ks)]
+                                                   ))
+                                               [{} ent] e-ids))))
+        entities-no-errored-db-id-data (map second data-pairs)
+        errored-db-id-data (map first data-pairs)]
+    [errored-db-id-data entities-no-errored-db-id-data]))
+
+
 (defn create-comparable-output
   ([desc fields schema command-data input-entities [expected-pairs expected-errored?] data-transactions]
    (let [uri (dh/create-in-mem-db-uri "entity-db")
@@ -37,39 +55,14 @@
                  expected-entities (map first expected-pairs)
                  actual-errors (map second actual-pairs)
 
-                 expected-per-ent-errored-ids (into [] (map get-errored-id-paths expected-entities))
+                 [_ expected-entities-no-errored-db-id] (errored-db-id-data expected-entities)
 
-                 expected-dis-pairs (->> (map vector expected-entities expected-per-ent-errored-ids)
-                                         (map (fn [[ent e-ids]]
-                                                (reduce (fn [[inc-ent exc-ent] ks]
-                                                          (if (empty? ks)
-                                                            [inc-ent exc-ent]
-                                                            [(assoc-in inc-ent ks (get-in ent ks))
-                                                             (core/dissoc-in exc-ent ks)]
-                                                            ))
-                                                        [{} ent] e-ids))))
+                 [actuaal-errored-db-id-data actual-entities-no-errored-db-id] (errored-db-id-data actual-entities)
 
-                 expected-dissoced-entities (map second expected-dis-pairs)
+                 transformed-actual-entities (id-func/make-ids-consistent actual-entities-no-errored-db-id
+                                                                          expected-entities-no-errored-db-id)
 
-                 act-per-ent-errored-ids (into [] (map get-errored-id-paths  actual-entities))
-
-                 act-dis-pairs   (->> (map vector actual-entities act-per-ent-errored-ids)
-                                    (map (fn [[ent e-ids]]
-                                           (reduce (fn [[inc-ent exc-ent] ks]
-                                                     (if (empty? ks)
-                                                       [inc-ent exc-ent]
-                                                       [(assoc-in inc-ent ks (get-in ent ks))
-                                                        (core/dissoc-in exc-ent ks)]
-                                                       )) [{} ent] e-ids))))
-
-                 act-dissoced-entities (map second act-dis-pairs)
-                 act-missing-entities (map first act-dis-pairs)
-
-
-                 transformed-actual-entities (id-func/make-ids-consistent act-dissoced-entities
-                                                                          expected-dissoced-entities)
-
-                 merged-actual-entities (->> (map vector act-missing-entities transformed-actual-entities)
+                 merged-actual-entities (->> (map vector actuaal-errored-db-id-data transformed-actual-entities)
                                              (map (fn [[mis act]]
                                                     (if (empty? mis)
                                                       act
@@ -101,28 +94,4 @@
 
   ([desc fields schema command-data input-entity expected-ouput]
    (create-comparable-invalid-single-entity-output desc fields schema command-data input-entity expected-ouput [])))
-
-(create-comparable-output
-  "Valid Test"
-  [{:db/ident :test-entity/string-field,
-    :db/valueType :db.type/string,
-    :db/cardinality :db.cardinality/one,
-    :db/unique :db.unique/identity}]
-  {:db/ident :entity.schema/test,
-   :entity.schema/part :db.part/entity-schema,
-   :entity.schema/fields
-   [{:field/nullable? true, :field/schema :test-entity/string-field}],
-   :entity.schema/natural-key [:test-entity/string-field]}
-  {:command-map {:entity.schema/test :command/insert},
-   :default-command :command/look-up}
-  [{:test-entity/string-field "Bob12"}
-   {:test-entity/string-field "Bob12"}]
-  [[[{:test-entity/string-field "Bob12",
-      :db/id {:part :db.part/entity-schema, :idx -1}}
-     false]
-    [{:test-entity/string-field "Bob12",
-      :db/id {:part :db.part/entity-schema, :idx -1}}
-     false]]
-   false]
-  [])
 
