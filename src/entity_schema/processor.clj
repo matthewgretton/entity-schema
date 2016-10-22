@@ -48,13 +48,16 @@
 
 (declare process-entity)
 
+(require '[spyscope.core])
+
 (defn process-ref-entity [db command-data field value id-cache entity-cache]
   (let [[expanded-value expand-errored?] (if (ref-identifier-type?   value)
                                            (->>  (expand-ref db value) (v/validate-expanded-ref field value))
                                            [value false])]
     (if expand-errored?
       [value id-cache entity-cache false]
-      (process-entity db (:field/entity-schema field) command-data #spy/p expanded-value id-cache entity-cache))))
+      (process-entity db (:field/entity-schema field) command-data #spy/p expanded-value id-cache entity-cache
+          ))))
 
 (defn process-valid-value [db command-data field value id-cache entity-cache]
   (if (u/ref-field? field)

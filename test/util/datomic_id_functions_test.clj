@@ -11,27 +11,6 @@
 
 (deftest making-ids-consistent-tests
 
-  (->> (create-comparable-output "If Id is errored then ignore"
-
-                                 [{:db/id
-                                   {:error/type :error.type/missing-natrual-key,
-                                    :error/message "Missing natural key",
-                                    :error/data
-                                    {:error/natural-key [:test-entity/string-field], :error/entity {}}}}()]
-                                 [{:db/id
-                                   {:error/message "Missing natural key",
-                                    :error/type :error.type/missing-natrual-key,
-                                    :error/data
-                                                   {:error/entity {}, :error/natural-key [:test-entity/string-field]}}}]
-
-                                 [{:db/id
-                                   {:error/message "Missing natural key",
-                                    :error/type :error.type/missing-natrual-key,
-                                    :error/data
-                                                   {:error/entity {}, :error/natural-key [:test-entity/string-field]}}}]
-                                 )
-       ((fn [[exp act desc]] (is (= exp act) desc)))
-       )
   (->> (create-comparable-output "Ids are equivalent"
 
                                  [{:db/id (d/tempid :db.part/user -2)}
@@ -161,7 +140,36 @@
                                  [{:db/id {:error/type :error.type/inconsisten-ids
                                            :error/data {:actual-id   :something2
                                                         :expected-id :something}}}])
-       ((fn [[exp act desc]] (is (= exp act) desc)))))
+       ((fn [[exp act desc]] (is (= exp act) desc))))
+
+
+  (->> (create-comparable-output "When the expected id has an ident and that is used to refer"
+
+                                 [{:db/id 123456}]
+
+                                 [{:db/id :something}]
+
+                                 [{:db/id :something}])
+       ((fn [[exp act desc]] (is (= exp act) desc))))
+
+  (->> (create-comparable-output "When the expected id has an ident and that is used to refer"
+
+                                 [{:db/id 123456}
+                                  {:db/id 123456}]
+
+                                 [{:db/id :something}
+                                  {:db/id :something-else}]
+
+                                 [{:db/id :something}
+                                  {:db/id {:error/data {:actual-id     123456
+                                                        :expected-id   :something-else
+                                                        :mapped-exp-id :something}
+                                           :error/type :error.type/inconsisten-ids}}])
+       ((fn [[exp act desc]] (is (= exp act) desc))))
+
+
+
+  )
 
 
 

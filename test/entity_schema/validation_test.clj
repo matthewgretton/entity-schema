@@ -190,7 +190,7 @@
 
   (->> (test/create-comparable-valid-single-entity-output
 
-         "Test expanding"
+         "Test expanding entity"
          [{:db/ident       :test-entity/ref-field
            :db/valueType   :db.type/ref
            :db/cardinality :db.cardinality/one
@@ -214,8 +214,7 @@
          {:test-entity/ref-field :bob-entity}
 
          {:db/id                 (d/tempid :db.part/user)
-          :test-entity/ref-field {:db/id                    (d/tempid :db.part/user)
-                                  :db/ident :bob-entity
+          :test-entity/ref-field {:db/id                    :bob-entity
                                   :test-entity/string-field "Bob"}}
 
 

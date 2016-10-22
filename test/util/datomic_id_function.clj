@@ -33,11 +33,13 @@
                   (if-let [actual-id (get-in actual-entity expected-id-path)]
                     (cond
 
-                      ;; actual and expected ids are consistently unmapped, and ids are already transacted
-                      ;; or partitions are the same
                       (and (bimap/consistently-unmapped? exp-act-bimap expected-id actual-id)
-                           (or (and (is-transacted-db-id? actual-id) (= actual-id expected-id))
-                               (and (and (is-temp-db-id? actual-id) (is-temp-db-id? expected-id))
+                           (or
+
+                             (or (and (is-transacted-db-id? actual-id) (= actual-id expected-id))
+                                 (and (integer? actual-id) (keyword? expected-id)))
+
+                             (and (and (is-temp-db-id? actual-id) (is-temp-db-id? expected-id))
                                     (= (:part actual-id) (:part expected-id)))))
                       [(bimap/assoc exp-act-bimap expected-id actual-id) (assoc-in output expected-id-path expected-id)]
 
