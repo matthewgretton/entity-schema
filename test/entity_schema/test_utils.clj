@@ -38,6 +38,9 @@
         errored-db-id-data (map first data-pairs)]
     [errored-db-id-data entities-no-errored-db-id-data]))
 
+(def conn (let [uri (dh/create-in-mem-db-uri "test")]
+            (d/create-database uri)
+            (d/connect uri)))
 
 (defn create-comparable-output
   ([desc fields schema command-data input-entities [expected-pairs expected-errored?] data-transactions]

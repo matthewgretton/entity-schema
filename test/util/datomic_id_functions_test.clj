@@ -143,13 +143,15 @@
        ((fn [[exp act desc]] (is (= exp act) desc))))
 
 
-  (->> (create-comparable-output "When the expected id has an ident and that is used to refer"
 
-                                 [{:db/id 123456}]
+  (->> (create-comparable-output "When the expected db/id has an equivalent db/ident"
 
-                                 [{:db/id :something}]
+                                 [{:db/id 1234567
+                                   :db/ident :bob}]
 
-                                 [{:db/id :something}])
+                                 [{:db/id :bob}]
+
+                                 [{:db/id :bob}])
        ((fn [[exp act desc]] (is (= exp act) desc))))
 
   (->> (create-comparable-output "When the expected id has an ident and that is used to refer"
@@ -170,6 +172,8 @@
 
 
   )
+
+
 
 
 

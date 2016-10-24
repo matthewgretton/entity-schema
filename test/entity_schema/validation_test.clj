@@ -214,7 +214,8 @@
          {:test-entity/ref-field :bob-entity}
 
          {:db/id                 (d/tempid :db.part/user)
-          :test-entity/ref-field {:db/id                    :bob-entity
+          :test-entity/ref-field {:db/id                    (d/tempid :db.part/user)
+                                  :db/ident                 :bob-entity
                                   :test-entity/string-field "Bob"}}
 
 

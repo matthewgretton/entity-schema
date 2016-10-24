@@ -28,7 +28,7 @@
   ([actual-entity expected-entity]
    (make-transaction-item-ids-consistent actual-entity expected-entity (bimap/create-empty)))
   ([actual-entity expected-entity input-exp-act-bimap]
-   (->> (core/flatten-for-key expected-entity :db/id)
+   (->> (core/flatten-for-keys expected-entity :db/id :db/ident)
         (reduce (fn [[exp-act-bimap output] [expected-id-path expected-id]]
                   (if-let [actual-id (get-in actual-entity expected-id-path)]
                     (cond
@@ -37,7 +37,8 @@
                            (or
 
                              (or (and (is-transacted-db-id? actual-id) (= actual-id expected-id))
-                                 (and (integer? actual-id) (keyword? expected-id)))
+                                 ;;(and (integer? actual-id) (keyword? expected-id))
+                                 )
 
                              (and (and (is-temp-db-id? actual-id) (is-temp-db-id? expected-id))
                                     (= (:part actual-id) (:part expected-id)))))
