@@ -117,7 +117,7 @@
 
                       ;; there's an inconsistency between the actual and expected ids.
                       :else
-                      (let [error (->> (error :error.type/inconsisten-ids
+                      (let [error (->> (error :error.type/inconsistent-ids
                                               (->> {:expected-id   expected-id
                                                     :actual-id     actual-id
                                                     :mapped-act-id (bimap-get-value exp-act-bimap expected-id)
@@ -222,7 +222,7 @@
                              {:db/id {:error/data {:actual-id     (d/tempid :db.part/user -2)
                                                    :expected-id   (d/tempid :db.part/custom -1)
                                                    :mapped-exp-id (d/tempid :db.part/user -1)}
-                                      :error/type :error.type/inconsisten-ids}}])
+                                      :error/type :error.type/inconsistent-ids}}])
 
 
   (test-make-ids-consistent "Expected ids different, actual the same"
@@ -236,7 +236,7 @@
                              {:db/id {:error/data {:actual-id     (d/tempid :db.part/user -2)
                                                    :expected-id   (d/tempid :db.part/user -3)
                                                    :mapped-exp-id (d/tempid :db.part/user -1)}
-                                      :error/type :error.type/inconsisten-ids}}])
+                                      :error/type :error.type/inconsistent-ids}}])
 
 
   (test-make-ids-consistent "Expected ids the same, actual different"
@@ -250,7 +250,7 @@
                              {:db/id {:error/data {:actual-id     (d/tempid :db.part/user -2)
                                                    :expected-id   (d/tempid :db.part/user -1)
                                                    :mapped-act-id (d/tempid :db.part/user -4)}
-                                      :error/type :error.type/inconsisten-ids}}])
+                                      :error/type :error.type/inconsistent-ids}}])
 
 
   (test-make-ids-consistent "Different transacted ids"
@@ -259,7 +259,7 @@
 
                             [{:db/id :something}]
 
-                            [{:db/id {:error/type :error.type/inconsisten-ids
+                            [{:db/id {:error/type :error.type/inconsistent-ids
                                       :error/data {:actual-id   :something2
                                                    :expected-id :something}}}]))
 
